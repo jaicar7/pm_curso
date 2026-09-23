@@ -1,37 +1,249 @@
-# High level steps for project
+# Plan detallado del proyecto: Project Management MVP
 
-Part 1: Plan
+## Objetivo
 
-Enrich this document to plan out each of these parts in detail, with substeps listed out as a checklist to be checked off by the agent, and with tests and success critieria for each. Also create an AGENTS.md file inside the frontend directory that describes the existing code there. Ensure the user checks and approves the plan.
+Construir una aplicación local de gestión de proyectos con autenticación básica, tablero Kanban persistente, backend FastAPI, contenedor Docker y conectividad con IA mediante OpenRouter. El objetivo no es una solución generalista, sino un MVP funcional y verificable con pruebas reales, priorizando la cobertura de los comportamientos importantes.
 
-Part 2: Scaffolding
+## Criterio de aprobación previo
 
-Set up the Docker infrastructure, the backend in backend/ with FastAPI, and write the start and stop scripts in the scripts/ directory. This should serve example static HTML to confirm that a 'hello world' example works running locally and also make an API call.
+Antes de empezar el desarrollo incremental, el plan debe quedar validado por el usuario. Este documento actúa como base para aprobar el alcance, secuencia y criterios de calidad.
 
-Part 3: Add in Frontend
+## Part 1: Planificación y preparación
 
-Now update so that the frontend is statically built and served, so that the app has the demo Kanban board displayed at /. Comprehensive unit and integration tests.
+### Checklist
+- [ ] Revisar la estructura actual del frontend y del backend.
+- [ ] Confirmar los requisitos de negocio, limitaciones y decisiones técnicas.
+- [ ] Definir la estrategia de pruebas por fase: unit tests, integration tests y E2E.
+- [ ] Crear el fichero [frontend/AGENTS.md](../frontend/AGENTS.md) con la descripción técnica del código existente.
+- [ ] Acordar un objetivo orientativo de hasta 80% de cobertura, sin crear pruebas artificiales solo para alcanzar el porcentaje.
+- [ ] Solicitar aprobación del plan antes de continuar a scaffold y desarrollo.
 
-Part 4: Add in a fake user sign in experience
+### Pruebas y criterios de éxito
+- El plan debe quedar documentado en este fichero.
+- Debe existir una guía específica para el frontend con sus componentes, librerías, modelos y pruebas.
+- El usuario debe confirmar que el alcance y el orden de trabajo son correctos.
 
-Now update so that on first hitting /, you need to log in with dummy credentials ("user", "password") in order to see the Kanban, and you can log out. Comprehensive tests.
+---
 
-Part 5: Database modeling
+## Part 2: Scaffolding del entorno
 
-Now propose a database schema for the Kanban, saving it as JSON. Document the database approach in docs/ and get user sign off.
+### Checklist
+- [ ] Crear la infraestructura Docker base para el proyecto.
+- [ ] Configurar el backend en [backend/](../backend/) con FastAPI.
+- [ ] Añadir dependencias y configuración inicial para Python con uv.
+- [ ] Crear scripts de arranque y parada en [scripts/](../scripts/) para Mac, Windows y Linux.
+- [ ] Servir una página de prueba simple para verificar que el contenedor responde correctamente.
+- [ ] Confirmar que el backend expone una ruta de ejemplo y que responde con datos estándar.
 
-Part 6: Backend
+### Pruebas
+- Healthcheck del container.
+- GET a una ruta de ejemplo para comprobar HTML estático.
+- GET a una ruta API de ejemplo para comprobar JSON.
 
-Now add API routes to allow the backend to read and change the Kanban for a given user; test this thoroughly with backend unit tests. The database should be created if it doesn't exist.
+### Criterios de éxito
+- El entorno arranca localmente sin errores.
+- La app sirve contenido y la API responde de forma consistente.
+- El proyecto sigue la estructura prevista por la organización del repositorio.
 
-Part 7: Frontend + Backend
+---
 
-Now have the frontend actually use the backend API, so that the app is a proper persistent Kanban board. Test very throughly.
+## Part 3: Integración del frontend y despliegue estático
 
-Part 8: AI connectivity
+### Checklist
+- [ ] Ajustar la app Next.js para que pueda compilarse y servir en producción.
+- [ ] Hacer que el frontend se sirva desde el backend en la ruta raíz `/`.
+- [ ] Mantener el tablero Kanban demo visible en la vista principal.
+- [ ] Verificar el comportamiento del drag-and-drop y la edición básica de tarjetas.
+- [ ] Completar unit tests para la lógica del tablero.
+- [ ] Completar tests de integración para la UI del Kanban.
 
-Now allow the backend to make an AI call via OpenRouter. Test connectivity with a simple "2+2" test and ensure the AI call is working.
+### Pruebas
+- Tests unitarios de la lógica de estado y movimiento de tarjetas.
+- Tests de renderizado del tablero y columnas.
+- Tests de interacción con drag-and-drop y formularios.
 
-Part 9: Now extend the backend call so that it always calls the AI with the JSON of the Kanban board, plus the user's question (and conversation history). The AI should respond with Structured Outputs that includes the response to the user and optionaly an update to the Kanban. Test thoroughly.
+### Criterios de éxito
+- La app muestra el tablero demo correctamente en `/`.
+- Los tests de frontend pasan consistentemente.
+- La base del MVP ya está lista para autenticación y persistencia.
 
-Part 10: Now add a beautiful sidebar widget to the UI supporting full AI chat, and allowing the LLM (as it determines) to update the Kanban based on its Structured Outputs. If the AI updates the Kanban, then the UI should refresh automatically.
+---
+
+## Part 4: Autenticación simulada
+
+### Checklist
+- [ ] Implementar una pantalla de login básica con credenciales dummy (`user`, `password`).
+- [ ] Bloquear el acceso al tablero hasta autenticarse.
+- [ ] Añadir flujo de cierre de sesión.
+- [ ] Mantener el estado de sesión de forma simple y local para el MVP.
+- [ ] Cubrir con tests de login y logout centrados en los flujos reales de usuario.
+
+### Pruebas
+- Intento de acceso sin autenticación redirige a login.
+- Usuario correcto entra al tablero.
+- Usuario incorrecto recibe error y no accede.
+- Cierre de sesión devuelve a la pantalla de login.
+
+### Criterios de éxito
+- El tablero solo es visible para usuarios autenticados.
+- La experiencia cumple con el requisito del MVP sin complejidad adicional.
+
+---
+
+## Part 5: Modelado de datos y esquema de base de datos
+
+### Checklist
+- [ ] Proponer esquema de usuario, tablero y tarjetas.
+- [ ] Definir columnas fijas y campos mínimos necesarios.
+- [ ] Guardar la descripción como JSON en [docs/](../docs/).
+- [ ] Documentar la estrategia de SQLite y la relación entre usuarios y tableros.
+- [ ] Obtener aprobación del usuario antes de implementar la persistencia real.
+
+### Pruebas
+- Validación del esquema JSON contra los requisitos del MVP.
+- Verificación de que soporta múltiples usuarios y un único tablero por usuario en el futuro.
+
+### Criterios de éxito
+- Existe un documento claro con el esquema propuesto.
+- La solución es simple, extensible y consistente con la limitación del MVP.
+
+---
+
+## Part 6: Backend y rutas de persistencia
+
+### Checklist
+- [ ] Crear la base de datos SQLite si no existe.
+- [ ] Diseñar rutas para leer y actualizar el tablero del usuario autenticado.
+- [ ] Implementar CRUD mínimo de columnas y tarjetas.
+- [ ] Asegurar que cada usuario solo accede a su propio board.
+- [ ] Cubrir con tests unitarios del backend y de integración de la API.
+
+### Pruebas
+- GET del board para un usuario.
+- POST/PUT/PATCH de tarjetas y columnas.
+- Validación de errores de usuario no existente o datos inválidos.
+- Persistencia en SQLite con re-arranque del servidor.
+
+### Criterios de éxito
+- La API es capaz de leer y modificar el board para un usuario concreto.
+- Los cambios persisten en la base de datos.
+- La cobertura de backend alcanza el objetivo mínimo establecido.
+
+---
+
+## Part 7: Frontend conectado al backend
+
+### Checklist
+- [ ] Sustituir el estado local por llamadas reales a la API para cargar y guardar el tablero.
+- [ ] Sincronizar cambios de arrastre, edición y creación de tarjetas con el backend.
+- [ ] Manejar estados de carga, error y reintento de forma simple.
+- [ ] Revisar que la UI sigue funcionando con datos persistentes.
+- [ ] Ejecutar tests de integración muy completos con datos reales.
+
+### Pruebas
+- Carga inicial del tablero desde backend.
+- Crear, renombrar y mover tarjetas.
+- Persistencia entre recargas.
+- Manejo de errores de red o API.
+
+### Criterios de éxito
+- El tablero es funcional con datos reales y persistentes.
+- La UI refleja el estado real del backend.
+- El comportamiento es estable y compatible con pruebas automatizadas.
+
+---
+
+## Part 8: Integración con OpenRouter
+
+### Checklist
+- [ ] Configurar la variable OPENROUTER_API_KEY y el modelo recomendado.
+- [ ] Añadir la capa de cliente HTTP para OpenRouter.
+- [ ] Hacer una prueba de conectividad simple con un prompt de cálculo básico (por ejemplo, "2+2").
+- [ ] Verificar respuestas y latencia agradables para un MVP local.
+- [ ] Registrar errores y fallos de autenticación con mensajes claros.
+
+### Pruebas
+- Llamada simple con prompt mínimo.
+- Comprobación de respuesta JSON y estructura esperada.
+- Validación de error cuando la clave del proveedor no está configurada.
+
+### Criterios de éxito
+- La integración con IA responde correctamente.
+- El backend no rompe la ejecución ni la API local.
+
+---
+
+## Part 9: IA sobre el estado del tablero
+
+### Checklist
+- [ ] Enviar al modelo el JSON actual del Kanban, la pregunta del usuario y el historial de conversación.
+- [ ] Definir un esquema estructurado de salida para: respuesta textual y actualización opcional del tablero.
+- [ ] Validar que la IA puede crear, mover o actualizar tarjetas según corresponda.
+- [ ] Añadir control de seguridad para que solo se acepten cambios válidos.
+- [ ] Probar casos normales y casos no válidos.
+
+### Pruebas
+- Consulta simple sin cambios.
+- Pedido para crear una tarjeta nueva.
+- Pedido para mover una tarjeta a otra columna.
+- Pedido con esquema inválido o contenido no permitido.
+
+### Criterios de éxito
+- La IA responde con una estructura fiable y útil.
+- El backend aplica cambios únicamente si la salida es válida.
+- La experiencia de usuario refleja de forma consistente los cambios.
+
+---
+
+## Part 10: Sidebar de chat con IA
+
+### Checklist
+- [ ] Diseñar un panel lateral para conversaciones con IA.
+- [ ] Permitir enviar preguntas del usuario y recibir respuestas en la UI.
+- [ ] Aplicar cambios del tablero cuando la IA devuelve una actualización válida.
+- [ ] Refrescar la vista automáticamente si la IA modifica el board.
+- [ ] Mejorar la presentación visual con la paleta de colores definida por el proyecto.
+- [ ] Verificar navegación, accesibilidad mínima y estados de carga.
+
+### Pruebas
+- Envío de mensaje desde la UI y respuesta visible.
+- Actualización del tablero activada por una instrucción de IA.
+- Interacción con múltiples mensajes consecutivos.
+- Manejo de errores cuando la IA no devuelve un payload válido.
+
+### Criterios de éxito
+- El usuario puede conversar con la IA desde la app.
+- La IA puede manipular el board de forma coherente.
+- El panel visual se integra con la experiencia del kanban.
+
+---
+
+## Métrica de cobertura objetivo
+
+Se trata de un objetivo de calidad orientativo: mantener una cobertura razonable alrededor del 80% cuando aporta valor real a la comprobación del comportamiento. No es una obligación artificial ni un requisito para forzar pruebas redundantes.
+
+### Requisitos de calidad
+- Ejecutar tests unitarios e integración en cada fase relevante.
+- Si una fase añade lógica con comportamiento nuevo, debe añadirse al menos un test que cubra ese flujo.
+- Priorizar pruebas con valor funcional real sobre métricas vacías o redundantes.
+- Si la cobertura no llega exactamente al 80% por una falta de valor práctico, el criterio aceptable es que el conjunto de pruebas cubra los flujos críticos del MVP con estabilidad.
+- El proyecto debe mantener un estado de green en CI/local para las pruebas relevantes.
+
+### Comandos esperados
+- Frontend: `npm run test`, `npm run test:unit`, `npm run test:e2e`.
+- Backend: el equivalente de pruebas unitarias y de API según la estructura final.
+
+---
+
+## Criterio de cierre del MVP
+
+El proyecto se considerará completo cuando:
+- el entorno funcione en Docker y localmente;
+- exista login con credenciales dummy;
+- el tablero Kanban sea persistente y usable;
+- exista backend con SQLite;
+- la IA pueda consultar y modificar el board;
+- la interfaz incluya chat lateral con actualizaciones automáticas;
+- se hayan ejecutado pruebas adecuadas con cobertura mínima del 80%.
+
+La ejecución debe seguir este orden para reducir riesgos y facilitar validación incremental.
