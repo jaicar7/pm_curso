@@ -18,3 +18,12 @@ class CardMove(BaseModel):
 
 class ColumnUpdate(BaseModel):
     title: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+
+class ChatResponse(BaseModel):
+    message: str
+    model: str

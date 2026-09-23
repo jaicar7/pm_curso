@@ -18,8 +18,11 @@ FastAPI backend for the Project Management MVP. It serves the exported Next.js f
 - `PATCH /api/cards/{card_id}`: edits a card.
 - `DELETE /api/cards/{card_id}`: deletes a card.
 - `POST /api/cards/{card_id}/move`: moves a card and normalizes positions.
+- `POST /api/ai/chat`: sends a minimal chat message to OpenRouter.
 
 The MVP uses the seeded `user` account internally. API authentication and frontend synchronization are scheduled for later phases.
+
+OpenRouter is configured server-side with `OPENROUTER_API_KEY` and the `google/gemma-4-31b-it:free` model. Provider failures are returned as `502` without exposing the key.
 
 ## Development
 

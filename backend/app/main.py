@@ -3,10 +3,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
 
 from .database import Database
-from .schemas import CardCreate, CardMove, CardUpdate, ColumnUpdate
+from .openrouter import OPENROUTER_MODEL, OpenRouterError, chat_with_openrouter
+from .schemas import CardCreate, CardMove, CardUpdate, ChatRequest, ChatResponse, ColumnUpdate
 
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 app = FastAPI(title="Project Management MVP")
 database = Database()
 frontend_dir = Path(__file__).resolve().parents[2] / "frontend" / "out"
@@ -34,6 +37,15 @@ def root() -> str:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "project-management-mvp"}
+
+
+@app.post("/api/ai/chat", response_model=ChatResponse)
+def ai_chat(payload: ChatRequest) -> ChatResponse:
+  try:
+    message = chat_with_openrouter(payload.message)
+  except OpenRouterError as error:
+    raise HTTPException(status_code=502, detail=str(error)) from error
+  return ChatResponse(message=message, model=OPENROUTER_MODEL)
 
 
 @app.get("/api/boards/me")

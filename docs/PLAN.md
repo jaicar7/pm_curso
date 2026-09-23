@@ -134,10 +134,10 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ## Part 7: Frontend conectado al backend
 
 ### Checklist
-- [ ] Sustituir el estado local por llamadas reales a la API para cargar y guardar el tablero.
-- [ ] Sincronizar cambios de arrastre, edición y creación de tarjetas con el backend.
-- [ ] Manejar estados de carga, error y reintento de forma simple.
-- [ ] Revisar que la UI sigue funcionando con datos persistentes.
+- [x] Sustituir el estado local por llamadas reales a la API para cargar y guardar el tablero.
+- [x] Sincronizar cambios de arrastre, edición y creación de tarjetas con el backend.
+- [x] Manejar estados de carga, error y reintento de forma simple.
+- [x] Revisar que la UI sigue funcionando con datos persistentes.
 - [ ] Ejecutar tests de integración muy completos con datos reales.
 
 ### Pruebas
@@ -147,20 +147,20 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - Manejo de errores de red o API.
 
 ### Criterios de éxito
-- El tablero es funcional con datos reales y persistentes.
-- La UI refleja el estado real del backend.
-- El comportamiento es estable y compatible con pruebas automatizadas.
+- [x] El tablero es funcional con datos reales y persistentes.
+- [x] La UI refleja el estado real del backend.
+- [ ] El comportamiento es estable y compatible con pruebas automatizadas.
 
 ---
 
 ## Part 8: Integración con OpenRouter
 
 ### Checklist
-- [ ] Configurar la variable OPENROUTER_API_KEY y el modelo recomendado.
-- [ ] Añadir la capa de cliente HTTP para OpenRouter.
-- [ ] Hacer una prueba de conectividad simple con un prompt de cálculo básico (por ejemplo, "2+2").
-- [ ] Verificar respuestas y latencia agradables para un MVP local.
-- [ ] Registrar errores y fallos de autenticación con mensajes claros.
+- [x] Configurar la variable OPENROUTER_API_KEY y el modelo recomendado.
+- [x] Añadir la capa de cliente HTTP para OpenRouter.
+- [x] Hacer una prueba de conectividad simple con un prompt de cálculo básico (por ejemplo, "2+2").
+- [ ] Verificar respuestas y latencia agradables para un MVP local; el proveedor respondió HTTP 429 por límite de uso/cuota.
+- [x] Registrar errores y fallos de autenticación con mensajes claros.
 
 ### Pruebas
 - Llamada simple con prompt mínimo.
@@ -168,8 +168,8 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - Validación de error cuando la clave del proveedor no está configurada.
 
 ### Criterios de éxito
-- La integración con IA responde correctamente.
-- El backend no rompe la ejecución ni la API local.
+- [ ] La integración con IA responde correctamente cuando OpenRouter dispone de cuota; la prueba real quedó bloqueada por HTTP 429.
+- [x] El backend no rompe la ejecución ni la API local.
 
 ---
 
