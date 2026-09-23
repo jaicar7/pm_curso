@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "database": {
+    "engine": "SQLite",
+    "file": "data/project-management.sqlite3",
+    "initialization": "Create the database and tables on backend startup when they do not exist.",
+    "foreign_keys": "PRAGMA foreign_keys = ON"
+  },
+  "entities": {
+    "users": {
+      "purpose": "Application users. The MVP seeds one user with username user.",
+      "columns": {
+        "id": { "type": "TEXT", "required": true, "primary_key": true },
+        "username": { "type": "TEXT", "required": true, "unique": true },
+        "password_hash": { "type": "TEXT", "required": true },
+        "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
+      },
+      "constraints": [
+        "username must not be empty"
+      ]
+    },
+    "boards": {
+      "purpose": "The Kanban board owned by a user.",
+      "columns": {
+        "id": { "type": "TEXT", "required": true, "primary_key": true },
+        "user_id": { "type": "TEXT", "required": true, "references": "users.id" },
+        "title": { "type": "TEXT", "required": true },
+        "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" },
+        "updated_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
+      },
+      "constraints": [
+        "UNIQUE(user_id) enforces one board per user for the MVP"
+      ]
+    },
+    "columns": {
+      "purpose": "Fixed board stages whose titles may be renamed.",
+      "columns": {
+        "id": { "type": "TEXT", "required": true, "primary_key": true },
+        "board_id": { "type": "TEXT", "required": true, "references": "boards.id" },
+        "title": { "type": "TEXT", "required": true },
+        "position": { "type": "INTEGER", "required": true, "minimum": 0 },
+        "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" },
+        "updated_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
+      },
+      "constraints": [
+        "UNIQUE(board_id, position) keeps column order deterministic",
+        "UNIQUE(board_id, id) keeps column identifiers scoped to a board"
+      ]
+    },
+    "cards": {
+      "purpose": "Cards displayed inside a board column.",
+      "columns": {
+        "id": { "type": "TEXT", "required": true, "primary_key": true },
+        "board_id": { "type": "TEXT", "required": true, "references": "boards.id" },
+        "column_id": { "type": "TEXT", "required": true, "references": "columns.id" },
+        "title": { "type": "TEXT", "required": true },
+        "details": { "type": "TEXT", "required": true, "default": "" },
+        "position": { "type": "INTEGER", "required": true, "minimum": 0 },
+        "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" },
+        "updated_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
+      },
+      "constraints": [
+        "UNIQUE(column_id, position) keeps card order deterministic",
+        "A card must reference a column belonging to the same board"
+      ]
+    }
+  },
+  "relationships": [
+    "users 1-to-1 boards for the MVP, modeled as users 1-to-many for future expansion",
+    "boards 1-to-many columns",
+    "boards 1-to-many cards",
+    "columns 1-to-many cards"
+  ],
+  "delete_behavior": {
+    "user": "CASCADE boards, columns, and cards",
+    "board": "CASCADE columns and cards",
+    "column": "RESTRICT while cards exist; move or delete cards before removing a column"
+  },
+  "seed_data": {
+    "user": {
+      "username": "user",
+      "password": "password",
+      "storage": "Store only a password hash in the database; the literal MVP password is used only by the seed/setup path."
+    },
+    "columns": [
+      { "id": "col-backlog", "title": "Backlog", "position": 0 },
+      { "id": "col-discovery", "title": "Discovery", "position": 1 },
+      { "id": "col-progress", "title": "In Progress", "position": 2 },
+      { "id": "col-review", "title": "Review", "position": 3 },
+      { "id": "col-done", "title": "Done", "position": 4 }
+    ]
+  },
+  "api_mapping": {
+    "board_response": "Return columns ordered by position, with cards nested in each column ordered by position.",
+    "rename_column": "Update columns.title and boards.updated_at.",
+    "create_card": "Insert cards with the next position for the selected column.",
+    "move_card": "Update column_id and normalize positions in the source and destination columns.",
+    "delete_card": "Delete the card and normalize positions in its column."
+  },
+  "implementation_notes": [
+    "Use parameterized SQL for all queries.",
+    "Use transactions for moves and other operations affecting more than one row.",
+    "Do not store the frontend cardIds array; derive ordering from cards.column_id and cards.position."
+  ]
+}

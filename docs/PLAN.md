@@ -72,11 +72,11 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ## Part 4: Autenticación simulada
 
 ### Checklist
-- [ ] Implementar una pantalla de login básica con credenciales dummy (`user`, `password`).
-- [ ] Bloquear el acceso al tablero hasta autenticarse.
-- [ ] Añadir flujo de cierre de sesión.
-- [ ] Mantener el estado de sesión de forma simple y local para el MVP.
-- [ ] Cubrir con tests de login y logout centrados en los flujos reales de usuario.
+- [x] Implementar una pantalla de login básica con credenciales dummy (`user`, `password`).
+- [x] Bloquear el acceso al tablero hasta autenticarse.
+- [x] Añadir flujo de cierre de sesión.
+- [x] Mantener el estado de sesión de forma simple y local para el MVP.
+- [x] Cubrir con tests de login y logout centrados en los flujos reales de usuario.
 
 ### Pruebas
 - Intento de acceso sin autenticación redirige a login.
@@ -85,19 +85,19 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - Cierre de sesión devuelve a la pantalla de login.
 
 ### Criterios de éxito
-- El tablero solo es visible para usuarios autenticados.
-- La experiencia cumple con el requisito del MVP sin complejidad adicional.
+- [x] El tablero solo es visible para usuarios autenticados.
+- [x] La experiencia cumple con el requisito del MVP sin complejidad adicional.
 
 ---
 
 ## Part 5: Modelado de datos y esquema de base de datos
 
 ### Checklist
-- [ ] Proponer esquema de usuario, tablero y tarjetas.
-- [ ] Definir columnas fijas y campos mínimos necesarios.
-- [ ] Guardar la descripción como JSON en [docs/](../docs/).
-- [ ] Documentar la estrategia de SQLite y la relación entre usuarios y tableros.
-- [ ] Obtener aprobación del usuario antes de implementar la persistencia real.
+- [x] Proponer esquema de usuario, tablero y tarjetas.
+- [x] Definir columnas fijas y campos mínimos necesarios.
+- [x] Guardar la descripción como JSON en [docs/DATA_MODEL.json](DATA_MODEL.json).
+- [x] Documentar la estrategia de SQLite y la relación entre usuarios y tableros.
+- [x] Obtener aprobación del usuario antes de implementar la persistencia real.
 
 ### Pruebas
 - Validación del esquema JSON contra los requisitos del MVP.
@@ -112,11 +112,11 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ## Part 6: Backend y rutas de persistencia
 
 ### Checklist
-- [ ] Crear la base de datos SQLite si no existe.
-- [ ] Diseñar rutas para leer y actualizar el tablero del usuario autenticado.
-- [ ] Implementar CRUD mínimo de columnas y tarjetas.
-- [ ] Asegurar que cada usuario solo accede a su propio board.
-- [ ] Cubrir con tests unitarios del backend y de integración de la API.
+- [x] Crear la base de datos SQLite si no existe.
+- [x] Diseñar rutas para leer y actualizar el tablero del usuario autenticado.
+- [x] Implementar CRUD mínimo de columnas y tarjetas.
+- [x] Asegurar que cada usuario solo accede a su propio board.
+- [x] Cubrir con tests unitarios del backend y de integración de la API.
 
 ### Pruebas
 - GET del board para un usuario.
@@ -125,9 +125,9 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - Persistencia en SQLite con re-arranque del servidor.
 
 ### Criterios de éxito
-- La API es capaz de leer y modificar el board para un usuario concreto.
-- Los cambios persisten en la base de datos.
-- La cobertura de backend alcanza el objetivo mínimo establecido.
+- [x] La API es capaz de leer y modificar el board para un usuario concreto.
+- [x] Los cambios persisten en la base de datos.
+- [x] La cobertura de backend alcanza el objetivo mínimo establecido.
 
 ---
 
