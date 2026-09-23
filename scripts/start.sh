@@ -28,7 +28,7 @@ printf '%s\n' "$SERVER_PID" > "$PID_FILE"
 
 echo "Backend starting..."
 for _ in $(seq 1 20); do
-  if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+  if curl -fsS http://127.0.0.1:8000/api/boards/me >/dev/null 2>&1; then
     echo "Backend is running on http://127.0.0.1:8000"
     curl -fsS http://127.0.0.1:8000/
     exit 0

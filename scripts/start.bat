@@ -19,7 +19,7 @@ if errorlevel 1 (
 start "Project Management MVP" /B python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 for /L %%i in (1,1,20) do (
-  curl -fsS http://127.0.0.1:8000/api/health >nul 2>nul
+  curl -fsS http://127.0.0.1:8000/api/boards/me >nul 2>nul
   if not errorlevel 1 (
     echo Backend is running on http://127.0.0.1:8000
     curl -fsS http://127.0.0.1:8000/

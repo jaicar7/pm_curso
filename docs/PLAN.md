@@ -8,64 +8,76 @@ Construir una aplicación local de gestión de proyectos con autenticación bás
 
 Antes de empezar el desarrollo incremental, el plan debe quedar validado por el usuario. Este documento actúa como base para aprobar el alcance, secuencia y criterios de calidad.
 
+## Decisiones adoptadas
+
+- El frontend se exporta como sitio estático y FastAPI sirve `frontend/out` desde `/`.
+- El estado persistente vive en SQLite. El backend usa `data/project-management.sqlite3` por defecto y permite cambiarlo con `PM_DATABASE_PATH`.
+- La sesión del MVP es local en el navegador con la clave `pm-mvp-authenticated`; las rutas de tablero usan internamente el usuario demo sembrado `user`.
+- El backend devuelve tarjetas anidadas dentro de sus columnas. El frontend las normaliza a su estructura `cards` + `cardIds` para conservar el drag-and-drop existente.
+- Las mutaciones del frontend usan la API real: carga inicial, renombrado, creación, borrado y movimiento de tarjetas. Las operaciones fallidas muestran error y recargan el board.
+- OpenRouter se invoca únicamente desde el backend. La clave se carga desde `.env` y nunca se envía al frontend.
+- La IA de tablero devuelve JSON validado con Pydantic y hasta 20 acciones. Solo puede usar IDs existentes y acciones explícitamente permitidas; las acciones conflictivas sobre una misma tarjeta se rechazan.
+- El historial de conversación y el sidebar de IA se dejan para la parte 10.
+- La prueba externa de OpenRouter alcanzó el proveedor pero quedó limitada por `HTTP 429`; las pruebas locales usan mocks y cubren errores sin depender de cuota.
+
 ## Part 1: Planificación y preparación
 
 ### Checklist
-- [ ] Revisar la estructura actual del frontend y del backend.
-- [ ] Confirmar los requisitos de negocio, limitaciones y decisiones técnicas.
-- [ ] Definir la estrategia de pruebas por fase: unit tests, integration tests y E2E.
-- [ ] Crear el fichero [frontend/AGENTS.md](../frontend/AGENTS.md) con la descripción técnica del código existente.
-- [ ] Acordar un objetivo orientativo de hasta 80% de cobertura, sin crear pruebas artificiales solo para alcanzar el porcentaje.
-- [ ] Solicitar aprobación del plan antes de continuar a scaffold y desarrollo.
+- [x] Revisar la estructura actual del frontend y del backend.
+- [x] Confirmar los requisitos de negocio, limitaciones y decisiones técnicas.
+- [x] Definir la estrategia de pruebas por fase: unit tests, integration tests y E2E.
+- [x] Crear el fichero [frontend/AGENTS.md](../frontend/AGENTS.md) con la descripción técnica del código existente.
+- [x] Acordar un objetivo orientativo de hasta 80% de cobertura, sin crear pruebas artificiales solo para alcanzar el porcentaje.
+- [x] Solicitar aprobación del plan antes de continuar a scaffold y desarrollo.
 
 ### Pruebas y criterios de éxito
-- El plan debe quedar documentado en este fichero.
-- Debe existir una guía específica para el frontend con sus componentes, librerías, modelos y pruebas.
-- El usuario debe confirmar que el alcance y el orden de trabajo son correctos.
+- [x] El plan queda documentado en este fichero.
+- [x] Existe una guía específica para el frontend.
+- [x] El usuario confirmó el alcance y el orden de trabajo.
 
 ---
 
 ## Part 2: Scaffolding del entorno
 
 ### Checklist
-- [ ] Crear la infraestructura Docker base para el proyecto.
-- [ ] Configurar el backend en [backend/](../backend/) con FastAPI.
-- [ ] Añadir dependencias y configuración inicial para Python con uv.
-- [ ] Crear scripts de arranque y parada en [scripts/](../scripts/) para Mac, Windows y Linux.
-- [ ] Servir una página de prueba simple para verificar que el contenedor responde correctamente.
-- [ ] Confirmar que el backend expone una ruta de ejemplo y que responde con datos estándar.
+- [x] Crear la infraestructura Docker base para el proyecto.
+- [x] Configurar el backend en [backend/](../backend/) con FastAPI.
+- [x] Añadir dependencias y configuración inicial para Python con uv.
+- [x] Crear scripts de arranque y parada en [scripts/](../scripts/) para Mac, Windows y Linux.
+- [x] Servir una página de prueba simple para verificar que el contenedor responde correctamente.
+- [x] Confirmar que el backend expone una ruta de ejemplo y que responde con datos estándar.
 
 ### Pruebas
-- Healthcheck del container.
-- GET a una ruta de ejemplo para comprobar HTML estático.
-- GET a una ruta API de ejemplo para comprobar JSON.
+- [x] Healthcheck del container.
+- [x] GET a una ruta de ejemplo para comprobar HTML estático.
+- [x] GET a una ruta API de ejemplo para comprobar JSON.
 
 ### Criterios de éxito
-- El entorno arranca localmente sin errores.
-- La app sirve contenido y la API responde de forma consistente.
-- El proyecto sigue la estructura prevista por la organización del repositorio.
+- [x] El entorno arranca localmente sin errores.
+- [x] La app sirve contenido y la API responde de forma consistente.
+- [x] El proyecto sigue la estructura prevista por la organización del repositorio.
 
 ---
 
 ## Part 3: Integración del frontend y despliegue estático
 
 ### Checklist
-- [ ] Ajustar la app Next.js para que pueda compilarse y servir en producción.
-- [ ] Hacer que el frontend se sirva desde el backend en la ruta raíz `/`.
-- [ ] Mantener el tablero Kanban demo visible en la vista principal.
-- [ ] Verificar el comportamiento del drag-and-drop y la edición básica de tarjetas.
-- [ ] Completar unit tests para la lógica del tablero.
-- [ ] Completar tests de integración para la UI del Kanban.
+- [x] Ajustar la app Next.js para que pueda compilarse y servir en producción.
+- [x] Hacer que el frontend se sirva desde el backend en la ruta raíz `/`.
+- [x] Mantener el tablero Kanban demo visible en la vista principal.
+- [x] Verificar el comportamiento del drag-and-drop y la edición básica de tarjetas.
+- [x] Completar unit tests para la lógica del tablero.
+- [x] Completar tests de integración para la UI del Kanban.
 
 ### Pruebas
-- Tests unitarios de la lógica de estado y movimiento de tarjetas.
-- Tests de renderizado del tablero y columnas.
-- Tests de interacción con drag-and-drop y formularios.
+- [x] Tests unitarios de la lógica de estado y movimiento de tarjetas.
+- [x] Tests de renderizado del tablero y columnas.
+- [x] Tests de interacción con drag-and-drop y formularios.
 
 ### Criterios de éxito
-- La app muestra el tablero demo correctamente en `/`.
-- Los tests de frontend pasan consistentemente.
-- La base del MVP ya está lista para autenticación y persistencia.
+- [x] La app muestra el tablero demo correctamente en `/`.
+- [x] Los tests de frontend pasan consistentemente.
+- [x] La base del MVP queda lista para autenticación y persistencia.
 
 ---
 
@@ -158,7 +170,7 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ### Checklist
 - [x] Configurar la variable OPENROUTER_API_KEY y el modelo recomendado.
 - [x] Añadir la capa de cliente HTTP para OpenRouter.
-- [x] Hacer una prueba de conectividad simple con un prompt de cálculo básico (por ejemplo, "2+2").
+- [x] Intentar una prueba de conectividad simple con un prompt de cálculo básico (por ejemplo, "2+2").
 - [ ] Verificar respuestas y latencia agradables para un MVP local; el proveedor respondió HTTP 429 por límite de uso/cuota.
 - [x] Registrar errores y fallos de autenticación con mensajes claros.
 
@@ -176,11 +188,11 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ## Part 9: IA sobre el estado del tablero
 
 ### Checklist
-- [ ] Enviar al modelo el JSON actual del Kanban, la pregunta del usuario y el historial de conversación.
-- [ ] Definir un esquema estructurado de salida para: respuesta textual y actualización opcional del tablero.
-- [ ] Validar que la IA puede crear, mover o actualizar tarjetas según corresponda.
-- [ ] Añadir control de seguridad para que solo se acepten cambios válidos.
-- [ ] Probar casos normales y casos no válidos.
+- [x] Enviar al modelo el JSON actual del Kanban y la pregunta del usuario; el historial queda pendiente para la parte 10.
+- [x] Definir un esquema estructurado de salida para: respuesta textual y actualización opcional del tablero.
+- [x] Validar que la IA puede crear, mover, actualizar y eliminar tarjetas, además de renombrar columnas.
+- [x] Añadir control de seguridad para que solo se acepten cambios válidos.
+- [x] Probar casos normales y casos no válidos.
 
 ### Pruebas
 - Consulta simple sin cambios.
@@ -189,9 +201,9 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - Pedido con esquema inválido o contenido no permitido.
 
 ### Criterios de éxito
-- La IA responde con una estructura fiable y útil.
-- El backend aplica cambios únicamente si la salida es válida.
-- La experiencia de usuario refleja de forma consistente los cambios.
+- [x] La IA responde con una estructura fiable y útil cuando el proveedor devuelve JSON válido.
+- [x] El backend aplica cambios únicamente si la salida es válida.
+- [ ] La experiencia de usuario refleja de forma consistente los cambios; queda pendiente integrar el sidebar en la parte 10.
 
 ---
 

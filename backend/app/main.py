@@ -6,8 +6,9 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from .database import Database
+from .ai_board import answer_board_request
 from .openrouter import OPENROUTER_MODEL, OpenRouterError, chat_with_openrouter
-from .schemas import CardCreate, CardMove, CardUpdate, ChatRequest, ChatResponse, ColumnUpdate
+from .schemas import BoardCommandRequest, BoardCommandResponse, CardCreate, CardMove, CardUpdate, ChatRequest, ChatResponse, ColumnUpdate
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 app = FastAPI(title="Project Management MVP")
@@ -46,6 +47,15 @@ def ai_chat(payload: ChatRequest) -> ChatResponse:
   except OpenRouterError as error:
     raise HTTPException(status_code=502, detail=str(error)) from error
   return ChatResponse(message=message, model=OPENROUTER_MODEL)
+
+
+@app.post("/api/ai/board", response_model=BoardCommandResponse)
+def ai_board(payload: BoardCommandRequest) -> BoardCommandResponse:
+  try:
+    command = answer_board_request(database, payload.message)
+  except (ValueError, OpenRouterError) as error:
+    raise HTTPException(status_code=502, detail=str(error)) from error
+  return BoardCommandResponse(response=command.response, actions=[action.model_dump() for action in command.actions])
 
 
 @app.get("/api/boards/me")

@@ -27,3 +27,12 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     model: str
+
+
+class BoardCommandRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+
+class BoardCommandResponse(BaseModel):
+    response: str
+    actions: list[dict]
