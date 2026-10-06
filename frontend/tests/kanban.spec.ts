@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-const signIn = async (page: Parameters<typeof test>[0]["page"]) => {
+const signIn = async (page: Page) => {
   await page.goto("/");
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
@@ -43,8 +43,38 @@ test("moves a card between columns", async ({ page }) => {
     columnBox.y + 120,
     { steps: 12 }
   );
+  const saved = page.waitForResponse((response) => response.url().endsWith("/api/cards/card-1/move"));
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  expect((await saved).ok()).toBe(true);
+
+  await page.reload();
+  await expect(page.getByTestId("column-col-review").getByTestId("card-card-1")).toBeVisible();
+});
+
+test("renames a column and keeps it after reload", async ({ page }) => {
+  await signIn(page);
+  const titleInput = page.getByTestId("column-col-discovery").getByLabel("Column title");
+  await titleInput.fill("Research");
+  const saved = page.waitForResponse((response) => response.url().endsWith("/api/columns/col-discovery"));
+  await titleInput.blur();
+  expect((await saved).ok()).toBe(true);
+
+  await page.reload();
+  await expect(page.getByTestId("column-col-discovery").getByLabel("Column title")).toHaveValue("Research");
+});
+
+test("edits a card and keeps it after reload", async ({ page }) => {
+  await signIn(page);
+  const card = page.getByTestId("card-card-2");
+  await card.getByRole("button", { name: "Edit Gather customer signals" }).click();
+  await card.getByLabel("Edit card title").fill("Customer interviews");
+  await card.getByLabel("Edit card details").fill("Talk to five customers.");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByText("Customer interviews")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId("card-card-2").getByText("Talk to five customers.")).toBeVisible();
 });
 
 test("rejects invalid credentials and logs out", async ({ page }) => {

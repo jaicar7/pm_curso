@@ -1,32 +1,22 @@
 @echo off
 setlocal
 
-set PROJECT_ROOT=%~dp0..
-cd /d "%PROJECT_ROOT%\backend"
+for %%i in ("%~dp0..") do set "PROJECT_ROOT=%%~fi"
+set "NAME=pm-mvp"
 
-where python >nul 2>nul
-if errorlevel 1 (
-  echo python is required to start the app.
-  exit /b 1
-)
+docker build -t %NAME% "%PROJECT_ROOT%" || exit /b 1
+docker rm -f %NAME% >nul 2>nul
+if not exist "%PROJECT_ROOT%\data" mkdir "%PROJECT_ROOT%\data"
+docker run -d --name %NAME% -p 8000:8000 --env-file "%PROJECT_ROOT%\.env" -v "%PROJECT_ROOT%\data:/app/data" %NAME% >nul || exit /b 1
 
-python -c "import fastapi" >nul 2>nul
-if errorlevel 1 (
-  echo Installing backend dependencies...
-  python -m pip install -r requirements.txt
-)
-
-start "Project Management MVP" /B python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-
-for /L %%i in (1,1,20) do (
-  curl -fsS http://127.0.0.1:8000/api/boards/me >nul 2>nul
+for /L %%i in (1,1,30) do (
+  curl -fsS http://127.0.0.1:8000/api/health >nul 2>nul
   if not errorlevel 1 (
-    echo Backend is running on http://127.0.0.1:8000
-    curl -fsS http://127.0.0.1:8000/
+    echo App is running on http://127.0.0.1:8000
     exit /b 0
   )
-  timeout /t 1 >nul
+  ping -n 2 127.0.0.1 >nul
 )
 
-echo Backend did not start successfully.
+echo App did not start. Check: docker logs %NAME%
 exit /b 1

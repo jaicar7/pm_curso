@@ -14,7 +14,7 @@ import {
 import { AIChatSidebar, type ChatMessage } from "@/components/AIChatSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { fetchBoard, createCard, deleteCard, moveCard as moveCardApi, renameColumn } from "@/lib/api";
+import { fetchBoard, createCard, deleteCard, moveCard as moveCardApi, renameColumn, updateCard } from "@/lib/api";
 import { moveCard, type BoardData } from "@/lib/kanban";
 
 const buildMessage = (role: "user" | "assistant", content: string): ChatMessage => ({
@@ -123,6 +123,15 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
               ),
             }
           : prev
+      );
+    });
+  };
+
+  const handleUpdateCard = async (cardId: string, title: string, details: string) => {
+    await persist(async () => {
+      const card = await updateCard(cardId, title, details);
+      setBoard((prev) =>
+        prev ? { ...prev, cards: { ...prev.cards, [card.id]: card } } : prev
       );
     });
   };
@@ -266,6 +275,7 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
                     onRename={handleRenameColumn}
                     onAddCard={handleAddCard}
                     onDeleteCard={handleDeleteCard}
+                    onUpdateCard={handleUpdateCard}
                     onRenameCommit={handleColumnBlur}
                   />
                 ))}

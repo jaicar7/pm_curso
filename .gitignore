@@ -174,3 +174,8 @@ cython_debug/
 
 .DS_Store
 
+
+# Project
+data/*.sqlite3
+frontend/test-results/
+frontend/playwright-report/

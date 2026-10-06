@@ -4,6 +4,8 @@ import hashlib
 import os
 import secrets
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,8 @@ from typing import Any
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[2] / "data" / "project-management.sqlite3"
 DEFAULT_USER_ID = "user-1"
 DEFAULT_BOARD_ID = "board-1"
+# Positions are moved out of the way before renumbering so UNIQUE(column_id, position) never collides mid-update.
+POSITION_OFFSET = 1_000_000
 
 SEED_COLUMNS = [
     ("col-backlog", "Backlog", 0),
@@ -31,6 +35,45 @@ SEED_CARDS = [
     ("card-8", "col-done", "Close onboarding sprint", "Document release notes and share internally.", 1),
 ]
 
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS boards (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS columns (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK(position >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(board_id, position),
+    UNIQUE(board_id, id)
+);
+CREATE TABLE IF NOT EXISTS cards (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE RESTRICT,
+    title TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL CHECK(position >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(column_id, position)
+);
+CREATE INDEX IF NOT EXISTS idx_columns_board_position ON columns(board_id, position);
+CREATE INDEX IF NOT EXISTS idx_cards_column_position ON cards(column_id, position);
+"""
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -42,61 +85,34 @@ def _password_hash(password: str, salt: bytes | None = None) -> str:
     return f"pbkdf2_sha256$120000${salt.hex()}${digest.hex()}"
 
 
+def _clean_title(title: str, label: str) -> str:
+    title = title.strip()
+    if not title:
+        raise ValueError(f"{label} title must not be empty")
+    return title
+
+
 class Database:
     def __init__(self, path: str | Path | None = None) -> None:
         configured_path = path or os.getenv("PM_DATABASE_PATH") or DEFAULT_DATABASE_PATH
         self.path = Path(configured_path)
 
-    def connect(self) -> sqlite3.Connection:
-        if self.path != Path(":memory:"):
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+    @contextmanager
+    def connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a connection that commits on success, rolls back on error, and always closes."""
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def initialize(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    username TEXT NOT NULL UNIQUE,
-                    password_hash TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS boards (
-                    id TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-                    title TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS columns (
-                    id TEXT PRIMARY KEY,
-                    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-                    title TEXT NOT NULL,
-                    position INTEGER NOT NULL CHECK(position >= 0),
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    UNIQUE(board_id, position),
-                    UNIQUE(board_id, id)
-                );
-                CREATE TABLE IF NOT EXISTS cards (
-                    id TEXT PRIMARY KEY,
-                    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-                    column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE RESTRICT,
-                    title TEXT NOT NULL,
-                    details TEXT NOT NULL DEFAULT '',
-                    position INTEGER NOT NULL CHECK(position >= 0),
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    UNIQUE(column_id, position)
-                );
-                CREATE INDEX IF NOT EXISTS idx_columns_board_position ON columns(board_id, position);
-                CREATE INDEX IF NOT EXISTS idx_cards_column_position ON cards(column_id, position);
-                """
-            )
+            connection.executescript(SCHEMA)
             if connection.execute("SELECT 1 FROM users WHERE id = ?", (DEFAULT_USER_ID,)).fetchone():
                 return
             timestamp = _now()
@@ -117,131 +133,115 @@ class Database:
                 [(card_id, DEFAULT_BOARD_ID, column_id, title, details, position, timestamp, timestamp) for card_id, column_id, title, details, position in SEED_CARDS],
             )
 
-    def board_for_user(self, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
-        self.initialize()
+    @contextmanager
+    def board(self, user_id: str = DEFAULT_USER_ID) -> Iterator[Board]:
+        """Yield the user's board; every operation inside the block runs in one transaction."""
         with self.connect() as connection:
-            board = connection.execute("SELECT * FROM boards WHERE user_id = ?", (user_id,)).fetchone()
-            if not board:
-                raise LookupError("User or board not found")
-            columns = connection.execute("SELECT * FROM columns WHERE board_id = ? ORDER BY position", (board["id"],)).fetchall()
-            cards = connection.execute("SELECT * FROM cards WHERE board_id = ? ORDER BY column_id, position", (board["id"],)).fetchall()
+            yield Board(connection, user_id)
+
+
+class Board:
+    def __init__(self, connection: sqlite3.Connection, user_id: str) -> None:
+        self.connection = connection
+        row = connection.execute("SELECT id, title FROM boards WHERE user_id = ?", (user_id,)).fetchone()
+        if not row:
+            raise LookupError("User or board not found")
+        self.id: str = row["id"]
+        self.title: str = row["title"]
+
+    def get(self) -> dict[str, Any]:
+        columns = self.connection.execute("SELECT * FROM columns WHERE board_id = ? ORDER BY position", (self.id,)).fetchall()
+        cards = self.connection.execute("SELECT * FROM cards WHERE board_id = ? ORDER BY position", (self.id,)).fetchall()
         cards_by_column: dict[str, list[dict[str, Any]]] = {column["id"]: [] for column in columns}
         for card in cards:
-            cards_by_column[card["column_id"]].append(self._card_dict(card))
+            cards_by_column[card["column_id"]].append(_card_dict(card))
         return {
-            "id": board["id"],
-            "title": board["title"],
-            "columns": [self._column_dict(column, cards_by_column[column["id"]]) for column in columns],
+            "id": self.id,
+            "title": self.title,
+            "columns": [_column_dict(column, cards_by_column[column["id"]]) for column in columns],
         }
 
-    def rename_column(self, column_id: str, title: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
-        title = title.strip()
-        if not title:
-            raise ValueError("Column title must not be empty")
-        self.initialize()
-        with self.connect() as connection:
-            result = connection.execute(
-                "UPDATE columns SET title = ?, updated_at = ? WHERE id = ? AND board_id = (SELECT id FROM boards WHERE user_id = ?)",
-                (title, _now(), column_id, user_id),
-            )
-            if result.rowcount == 0:
-                raise LookupError("Column not found")
-            row = connection.execute("SELECT * FROM columns WHERE id = ?", (column_id,)).fetchone()
-        return self._column_dict(row, [])
+    def rename_column(self, column_id: str, title: str) -> dict[str, Any]:
+        title = _clean_title(title, "Column")
+        self._column(column_id)
+        self.connection.execute("UPDATE columns SET title = ?, updated_at = ? WHERE id = ?", (title, _now(), column_id))
+        return _column_dict(self._column(column_id), [])
 
-    def create_card(self, column_id: str, title: str, details: str = "", user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
-        title = title.strip()
-        if not title:
-            raise ValueError("Card title must not be empty")
-        self.initialize()
+    def create_card(self, column_id: str, title: str, details: str = "") -> dict[str, Any]:
+        title = _clean_title(title, "Card")
+        self._column(column_id)
         card_id = f"card-{secrets.token_urlsafe(8)}"
         timestamp = _now()
-        with self.connect() as connection:
-            column = connection.execute(
-                "SELECT c.*, b.id AS board_id FROM columns c JOIN boards b ON b.id = c.board_id WHERE c.id = ? AND b.user_id = ?",
-                (column_id, user_id),
-            ).fetchone()
-            if not column:
-                raise LookupError("Column not found")
-            position = connection.execute("SELECT COALESCE(MAX(position) + 1, 0) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
-            connection.execute(
-                "INSERT INTO cards (id, board_id, column_id, title, details, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (card_id, column["board_id"], column_id, title, details.strip(), position, timestamp, timestamp),
-            )
-            row = connection.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
-        return self._card_dict(row)
+        position = len(self._card_ids(column_id))
+        self.connection.execute(
+            "INSERT INTO cards (id, board_id, column_id, title, details, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (card_id, self.id, column_id, title, details.strip(), position, timestamp, timestamp),
+        )
+        return _card_dict(self._card(card_id))
 
-    def update_card(self, card_id: str, title: str, details: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
-        title = title.strip()
-        if not title:
-            raise ValueError("Card title must not be empty")
-        self.initialize()
-        with self.connect() as connection:
-            result = connection.execute(
-                "UPDATE cards SET title = ?, details = ?, updated_at = ? WHERE id = ? AND board_id IN (SELECT id FROM boards WHERE user_id = ?)",
-                (title, details.strip(), _now(), card_id, user_id),
-            )
-            if result.rowcount == 0:
-                raise LookupError("Card not found")
-            row = connection.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
-        return self._card_dict(row)
+    def update_card(self, card_id: str, title: str, details: str) -> dict[str, Any]:
+        title = _clean_title(title, "Card")
+        self._card(card_id)
+        self.connection.execute(
+            "UPDATE cards SET title = ?, details = ?, updated_at = ? WHERE id = ?",
+            (title, details.strip(), _now(), card_id),
+        )
+        return _card_dict(self._card(card_id))
 
-    def delete_card(self, card_id: str, user_id: str = DEFAULT_USER_ID) -> None:
-        self.initialize()
-        with self.connect() as connection:
-            card = connection.execute(
-                "SELECT cards.column_id, cards.position FROM cards JOIN boards ON boards.id = cards.board_id WHERE cards.id = ? AND boards.user_id = ?",
-                (card_id, user_id),
-            ).fetchone()
-            if not card:
-                raise LookupError("Card not found")
-            connection.execute("DELETE FROM cards WHERE id = ?", (card_id,))
-            connection.execute(
-                "UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?",
-                (card["column_id"], card["position"]),
-            )
+    def delete_card(self, card_id: str) -> None:
+        column_id = self._card(card_id)["column_id"]
+        self.connection.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+        self._write_positions(column_id, self._card_ids(column_id))
 
-    def move_card(self, card_id: str, column_id: str, position: int, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
+    def move_card(self, card_id: str, column_id: str, position: int) -> dict[str, Any]:
         if position < 0:
             raise ValueError("Position must not be negative")
-        self.initialize()
-        with self.connect() as connection:
-            card = connection.execute(
-                "SELECT cards.* FROM cards JOIN boards ON boards.id = cards.board_id WHERE cards.id = ? AND boards.user_id = ?",
-                (card_id, user_id),
-            ).fetchone()
-            target = connection.execute(
-                "SELECT columns.* FROM columns JOIN boards ON boards.id = columns.board_id WHERE columns.id = ? AND boards.user_id = ?",
-                (column_id, user_id),
-            ).fetchone()
-            if not card or not target or card["board_id"] != target["board_id"]:
-                raise LookupError("Card or target column not found")
-            cards = connection.execute(
-                "SELECT id, column_id FROM cards WHERE board_id = ? ORDER BY column_id, position",
-                (card["board_id"],),
-            ).fetchall()
-            ordered_cards: dict[str, list[str]] = {}
-            for board_card in cards:
-                ordered_cards.setdefault(board_card["column_id"], []).append(board_card["id"])
-            ordered_cards[card["column_id"]].remove(card_id)
-            target_cards = ordered_cards.setdefault(column_id, [])
-            target_cards.insert(min(position, len(target_cards)), card_id)
+        source_column_id = self._card(card_id)["column_id"]
+        self._column(column_id)
 
-            connection.execute("UPDATE cards SET position = position + 100000 WHERE board_id = ?", (card["board_id"],))
-            timestamp = _now()
-            for target_column_id, card_ids in ordered_cards.items():
-                for next_position, next_card_id in enumerate(card_ids):
-                    connection.execute(
-                        "UPDATE cards SET column_id = ?, position = ?, updated_at = ? WHERE id = ?",
-                        (target_column_id, next_position, timestamp, next_card_id),
-                    )
-            row = connection.execute("SELECT * FROM cards WHERE id = ?", (card_id,)).fetchone()
-        return self._card_dict(row)
+        source_ids = self._card_ids(source_column_id)
+        source_ids.remove(card_id)
+        target_ids = source_ids if column_id == source_column_id else self._card_ids(column_id)
+        target_ids.insert(min(position, len(target_ids)), card_id)
 
-    @staticmethod
-    def _column_dict(row: sqlite3.Row, cards: list[dict[str, Any]]) -> dict[str, Any]:
-        return {"id": row["id"], "title": row["title"], "position": row["position"], "cards": cards}
+        if column_id != source_column_id:
+            self._write_positions(source_column_id, source_ids)
+        self._write_positions(column_id, target_ids)
+        self.connection.execute("UPDATE cards SET updated_at = ? WHERE id = ?", (_now(), card_id))
+        return _card_dict(self._card(card_id))
 
-    @staticmethod
-    def _card_dict(row: sqlite3.Row) -> dict[str, Any]:
-        return {"id": row["id"], "title": row["title"], "details": row["details"], "position": row["position"], "column_id": row["column_id"]}
+    def _column(self, column_id: str) -> sqlite3.Row:
+        row = self.connection.execute("SELECT * FROM columns WHERE id = ? AND board_id = ?", (column_id, self.id)).fetchone()
+        if not row:
+            raise LookupError("Column not found")
+        return row
+
+    def _card(self, card_id: str) -> sqlite3.Row:
+        row = self.connection.execute("SELECT * FROM cards WHERE id = ? AND board_id = ?", (card_id, self.id)).fetchone()
+        if not row:
+            raise LookupError("Card not found")
+        return row
+
+    def _card_ids(self, column_id: str) -> list[str]:
+        rows = self.connection.execute(
+            "SELECT id FROM cards WHERE board_id = ? AND column_id = ? ORDER BY position", (self.id, column_id)
+        ).fetchall()
+        return [row["id"] for row in rows]
+
+    def _write_positions(self, column_id: str, card_ids: list[str]) -> None:
+        self.connection.execute(
+            "UPDATE cards SET position = position + ? WHERE board_id = ? AND column_id = ?",
+            (POSITION_OFFSET, self.id, column_id),
+        )
+        self.connection.executemany(
+            "UPDATE cards SET column_id = ?, position = ? WHERE id = ?",
+            [(column_id, position, card_id) for position, card_id in enumerate(card_ids)],
+        )
+
+
+def _column_dict(row: sqlite3.Row, cards: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"id": row["id"], "title": row["title"], "position": row["position"], "cards": cards}
+
+
+def _card_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {"id": row["id"], "title": row["title"], "details": row["details"], "position": row["position"], "column_id": row["column_id"]}

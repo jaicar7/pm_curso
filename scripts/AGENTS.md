@@ -1,1 +1,1 @@
-This folder will contain start and stop scripts for Mac, PC and Linux
+Start and stop scripts for Mac/Linux (`.sh`) and Windows (`.bat`). `start` builds the Docker image and runs container `pm-mvp` on port 8000 with `.env` and the project `data/` folder mounted; `stop` removes the container.

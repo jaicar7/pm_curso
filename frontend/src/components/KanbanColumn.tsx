@@ -12,6 +12,7 @@ type KanbanColumnProps = {
   onRenameCommit: (columnId: string) => void | Promise<void>;
   onAddCard: (columnId: string, title: string, details: string) => void | Promise<void>;
   onDeleteCard: (columnId: string, cardId: string) => void | Promise<void>;
+  onUpdateCard: (cardId: string, title: string, details: string) => void | Promise<void>;
 };
 
 export const KanbanColumn = ({
@@ -21,6 +22,7 @@ export const KanbanColumn = ({
   onRenameCommit,
   onAddCard,
   onDeleteCard,
+  onUpdateCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -57,6 +59,7 @@ export const KanbanColumn = ({
               key={card.id}
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onUpdate={onUpdateCard}
             />
           ))}
         </SortableContext>

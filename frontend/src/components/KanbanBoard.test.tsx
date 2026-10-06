@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { fetchBoard, updateCard } from "@/lib/api";
 
 vi.mock("@/lib/api", async () => {
   const { initialData } = await import("@/lib/kanban");
@@ -13,6 +14,11 @@ vi.mock("@/lib/api", async () => {
       title,
       details,
     })),
+    updateCard: vi.fn(async (cardId: string, title: string, details: string) => ({
+      id: cardId,
+      title,
+      details,
+    })),
     deleteCard: vi.fn(async () => undefined),
     moveCard: vi.fn(async () => undefined),
   };
@@ -20,40 +26,103 @@ vi.mock("@/lib/api", async () => {
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
+const mockAiResponses = (...responses: Array<{ ok: boolean; body: unknown }>) => {
+  const fetchMock = vi.spyOn(globalThis, "fetch");
+  for (const { ok, body } of responses) {
+    fetchMock.mockResolvedValueOnce({ ok, json: async () => body } as Response);
+  }
+  return fetchMock;
+};
+
+const sendAiMessage = async (message: string) => {
+  await userEvent.type(screen.getByLabelText(/message to ai/i), message);
+  await userEvent.click(screen.getByRole("button", { name: /send/i }));
+};
+
 describe("KanbanBoard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
   it("renders five columns", async () => {
     render(<KanbanBoard />);
     await waitFor(() => expect(screen.getAllByTestId(/column-/i)).toHaveLength(5));
   });
 
-  it("sends a prompt to the AI board assistant and shows the response", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+  it("sends a prompt to the AI board assistant, shows the response and reloads the board", async () => {
+    const fetchMock = mockAiResponses({
       ok: true,
-      json: async () => ({
-        response: "Done. I updated the board.",
-        actions: [],
-      }),
-    } as Response);
+      body: { response: "Done. I updated the board.", actions: [] },
+    });
+
+    render(<KanbanBoard />);
+    await waitFor(() => expect(screen.getAllByTestId(/column-/i)).toHaveLength(5));
+    expect(fetchBoard).toHaveBeenCalledTimes(1);
+
+    await sendAiMessage("Add a card called Release review");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/board",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ message: "Add a card called Release review" }),
+      })
+    );
+    expect(await screen.findByText("Done. I updated the board.")).toBeInTheDocument();
+    await waitFor(() => expect(fetchBoard).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps the conversation across consecutive AI messages", async () => {
+    mockAiResponses(
+      { ok: true, body: { response: "First answer", actions: [] } },
+      { ok: true, body: { response: "Second answer", actions: [] } }
+    );
 
     render(<KanbanBoard />);
     await waitFor(() => expect(screen.getAllByTestId(/column-/i)).toHaveLength(5));
 
-    const input = screen.getByLabelText(/message to ai/i);
-    await userEvent.type(input, "Add a card called Release review");
-    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+    await sendAiMessage("First question");
+    expect(await screen.findByText("First answer")).toBeInTheDocument();
+    await sendAiMessage("Second question");
+    expect(await screen.findByText("Second answer")).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/ai/board",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ message: "Add a card called Release review" }),
-        })
-      )
+    for (const text of ["First question", "First answer", "Second question"]) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+  });
+
+  it("shows an error when the AI request fails", async () => {
+    mockAiResponses({ ok: false, body: { detail: "AI response did not contain a JSON object" } });
+
+    render(<KanbanBoard />);
+    await waitFor(() => expect(screen.getAllByTestId(/column-/i)).toHaveLength(5));
+
+    await sendAiMessage("Do something");
+
+    expect(
+      await screen.findByText("The AI could not process that request. Please try again.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("AI response did not contain a JSON object");
+  });
+
+  it("edits a card", async () => {
+    render(<KanbanBoard />);
+    await waitFor(() => expect(screen.getAllByTestId(/column-/i)).toHaveLength(5));
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Align roadmap themes" }));
+    const titleInput = screen.getByLabelText("Edit card title");
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, "Roadmap themes v2");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateCard).toHaveBeenCalledWith(
+      "card-1",
+      "Roadmap themes v2",
+      "Draft quarterly themes with impact statements and metrics."
     );
-    expect(await screen.findByText("Done. I updated the board.")).toBeInTheDocument();
-
-    fetchMock.mockRestore();
+    expect(await screen.findByText("Roadmap themes v2")).toBeInTheDocument();
+    expect(screen.queryByText("Align roadmap themes")).not.toBeInTheDocument();
   });
 
   it("renames a column", async () => {

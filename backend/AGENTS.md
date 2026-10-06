@@ -5,7 +5,8 @@ FastAPI backend for the Project Management MVP. It serves the exported Next.js f
 ## Structure
 
 - `app/main.py`: FastAPI app, static frontend serving, and API routes.
-- `app/database.py`: SQLite schema initialization, seed data, and board/card persistence operations.
+- `app/database.py`: SQLite schema initialization and seed data (`Database`), and board/card operations (`Board`, obtained with `with database.board() as board:`, one transaction per block).
+- `app/ai_board.py`: prompt building, parsing and atomic execution of AI board actions.
 - `app/schemas.py`: Pydantic request models for board mutations.
 - `tests/`: API and smoke tests using temporary SQLite databases where persistence is tested.
 
@@ -27,4 +28,4 @@ OpenRouter is configured server-side with `OPENROUTER_API_KEY` and the `nvidia/n
 
 ## Development
 
-From `backend/`, run `python -m pytest -q`. Dependencies are listed in `requirements.txt` (used by the scripts and by `uv` in the Dockerfile) and mirrored in `pyproject.toml`. The database path defaults to `data/project-management.sqlite3` and can be overridden with `PM_DATABASE_PATH`.
+From `backend/`, run `python -m pytest -q`. Coverage: `python -m pytest --cov=app`. Dependencies are listed in `requirements.txt` (installed with `uv` in the Dockerfile) and mirrored in `pyproject.toml`. The database path defaults to `data/project-management.sqlite3` and can be overridden with `PM_DATABASE_PATH`.

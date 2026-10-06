@@ -1,14 +1,18 @@
 from pydantic import BaseModel, Field
 
+# Same limits as the AI action schema in ai_board.py.
+TITLE_MAX_LENGTH = 200
+DETAILS_MAX_LENGTH = 5000
+
 
 class CardCreate(BaseModel):
-    title: str = Field(min_length=1)
-    details: str = ""
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    details: str = Field(default="", max_length=DETAILS_MAX_LENGTH)
 
 
 class CardUpdate(BaseModel):
-    title: str = Field(min_length=1)
-    details: str = ""
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    details: str = Field(default="", max_length=DETAILS_MAX_LENGTH)
 
 
 class CardMove(BaseModel):
@@ -17,7 +21,7 @@ class CardMove(BaseModel):
 
 
 class ColumnUpdate(BaseModel):
-    title: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
 
 
 class ChatRequest(BaseModel):
@@ -30,7 +34,7 @@ class ChatResponse(BaseModel):
 
 
 class BoardCommandRequest(BaseModel):
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=DETAILS_MAX_LENGTH)
 
 
 class BoardCommandResponse(BaseModel):

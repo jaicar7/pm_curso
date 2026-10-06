@@ -3,26 +3,27 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .database import Database
-from .openrouter import OpenRouterError, chat_with_openrouter
+from .database import Board, Database
+from .openrouter import chat_with_openrouter
+from .schemas import DETAILS_MAX_LENGTH, TITLE_MAX_LENGTH
 
 
 class CreateCardAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["create_card"]
     column_id: str = Field(min_length=1)
-    title: str = Field(min_length=1, max_length=200)
-    details: str = Field(default="", max_length=5000)
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    details: str = Field(default="", max_length=DETAILS_MAX_LENGTH)
 
 
 class UpdateCardAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["update_card"]
     card_id: str = Field(min_length=1)
-    title: str = Field(min_length=1, max_length=200)
-    details: str = Field(default="", max_length=5000)
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    details: str = Field(default="", max_length=DETAILS_MAX_LENGTH)
 
 
 class MoveCardAction(BaseModel):
@@ -43,7 +44,7 @@ class RenameColumnAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["rename_column"]
     column_id: str = Field(min_length=1)
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
 
 
 BoardAction = Annotated[
@@ -58,29 +59,17 @@ BoardAction = Annotated[
 
 class BoardCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    response: str = Field(min_length=1, max_length=5000)
+    response: str = Field(min_length=1, max_length=DETAILS_MAX_LENGTH)
     actions: list[BoardAction] = Field(default_factory=list, max_length=20)
 
 
-board_command_adapter = TypeAdapter(BoardCommand)
-
-
-def _json_from_response(content: str) -> dict[str, Any]:
-    candidate = content.strip()
-    if candidate.startswith("```"):
-        candidate = candidate.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    try:
-        payload = json.loads(candidate)
-    except json.JSONDecodeError as error:
-        raise ValueError("AI response was not valid JSON") from error
-    if not isinstance(payload, dict):
-        raise ValueError("AI response must be a JSON object")
-    return payload
-
-
 def parse_board_command(content: str) -> BoardCommand:
+    # Models often wrap the JSON object in code fences or prose; keep only the outermost object.
+    start, end = content.find("{"), content.rfind("}")
+    if start == -1 or end < start:
+        raise ValueError("AI response did not contain a JSON object")
     try:
-        return board_command_adapter.validate_python(_json_from_response(content))
+        return BoardCommand.model_validate_json(content[start : end + 1])
     except ValidationError as error:
         raise ValueError("AI response did not match the board command schema") from error
 
@@ -99,60 +88,32 @@ def build_board_prompt(message: str, board: dict[str, Any]) -> str:
     )
 
 
-def execute_board_command(database: Database, command: BoardCommand) -> None:
-    board = database.board_for_user()
-    column_ids = {column["id"] for column in board["columns"]}
-    card_ids = {card["id"] for column in board["columns"] for card in column["cards"]}
-    touched_cards: set[str] = set()
-
-    for action in command.actions:
-        if isinstance(action, CreateCardAction):
-            if action.column_id not in column_ids:
-                raise ValueError(f"Unknown column: {action.column_id}")
-            if not action.title.strip():
-                raise ValueError("Card title must not be empty")
-        elif isinstance(action, RenameColumnAction):
-            if action.column_id not in column_ids:
-                raise ValueError(f"Unknown column: {action.column_id}")
-            if not action.title.strip():
-                raise ValueError("Column title must not be empty")
-        elif isinstance(action, MoveCardAction):
-            if action.card_id not in card_ids:
-                raise ValueError(f"Unknown card: {action.card_id}")
-            if action.column_id not in column_ids:
-                raise ValueError(f"Unknown column: {action.column_id}")
-            touched_cards.add(action.card_id)
-        elif isinstance(action, (UpdateCardAction, DeleteCardAction)):
-            if action.card_id not in card_ids:
-                raise ValueError(f"Unknown card: {action.card_id}")
-            if isinstance(action, UpdateCardAction) and not action.title.strip():
-                raise ValueError("Card title must not be empty")
-            if action.card_id in touched_cards:
-                raise ValueError(f"Multiple actions for card: {action.card_id}")
-            touched_cards.add(action.card_id)
-
-    if len(touched_cards) != sum(
-        isinstance(action, (MoveCardAction, UpdateCardAction, DeleteCardAction))
-        for action in command.actions
-    ):
+def execute_board_command(board: Board, command: BoardCommand) -> None:
+    """Apply all actions on one board transaction; any failure rolls back every action."""
+    card_actions = [action.card_id for action in command.actions if hasattr(action, "card_id")]
+    if len(card_actions) != len(set(card_actions)):
         raise ValueError("Multiple actions for the same card are not allowed")
 
-    for action in command.actions:
-        if isinstance(action, CreateCardAction):
-            database.create_card(action.column_id, action.title, action.details)
-        elif isinstance(action, RenameColumnAction):
-            database.rename_column(action.column_id, action.title)
-        elif isinstance(action, UpdateCardAction):
-            database.update_card(action.card_id, action.title, action.details)
-        elif isinstance(action, MoveCardAction):
-            database.move_card(action.card_id, action.column_id, action.position)
-        elif isinstance(action, DeleteCardAction):
-            database.delete_card(action.card_id)
+    try:
+        for action in command.actions:
+            if isinstance(action, CreateCardAction):
+                board.create_card(action.column_id, action.title, action.details)
+            elif isinstance(action, RenameColumnAction):
+                board.rename_column(action.column_id, action.title)
+            elif isinstance(action, UpdateCardAction):
+                board.update_card(action.card_id, action.title, action.details)
+            elif isinstance(action, MoveCardAction):
+                board.move_card(action.card_id, action.column_id, action.position)
+            elif isinstance(action, DeleteCardAction):
+                board.delete_card(action.card_id)
+    except LookupError as error:
+        raise ValueError(f"AI action rejected: {error}") from error
 
 
 def answer_board_request(database: Database, message: str) -> BoardCommand:
-    board = database.board_for_user()
-    content = chat_with_openrouter(build_board_prompt(message, board))
-    command = parse_board_command(content)
-    execute_board_command(database, command)
+    with database.board() as board:
+        snapshot = board.get()
+    command = parse_board_command(chat_with_openrouter(build_board_prompt(message, snapshot)))
+    with database.board() as board:
+        execute_board_command(board, command)
     return command

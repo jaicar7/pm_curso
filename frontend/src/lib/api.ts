@@ -64,10 +64,10 @@ export const createCard = (columnId: string, title: string, details: string) =>
     body: JSON.stringify({ title, details }),
   });
 
-export const updateCard = (cardId: string, card: Card) =>
-  request(`/api/cards/${cardId}`, {
+export const updateCard = (cardId: string, title: string, details: string) =>
+  request<Card>(`/api/cards/${cardId}`, {
     method: "PATCH",
-    body: JSON.stringify({ title: card.title, details: card.details }),
+    body: JSON.stringify({ title, details }),
   });
 
 export const deleteCard = (cardId: string) =>

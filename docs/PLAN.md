@@ -18,10 +18,10 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - OpenRouter se invoca únicamente desde el backend. La clave se carga desde `.env` y nunca se envía al frontend.
 - La IA de tablero devuelve JSON validado con Pydantic y hasta 20 acciones. Solo puede usar IDs existentes y acciones explícitamente permitidas; las acciones conflictivas sobre una misma tarjeta se rechazan.
 - El modelo usado es `nvidia/nemotron-3-ultra-550b-a55b:free` (cambiado desde `google/gemma-4-31b-it:free` en la parte 9).
-- El Dockerfile instala las dependencias de Python con `uv pip install` a partir de `backend/requirements.txt`; los scripts locales usan el mismo fichero con `pip`.
+- El Dockerfile instala las dependencias de Python con `uv pip install` a partir de `backend/requirements.txt`; los scripts de `scripts/` construyen la imagen y arrancan el contenedor `pm-mvp` con `data/` montado como volumen.
 - El sidebar de IA muestra el historial de la conversación en la UI, pero cada petición al modelo solo envía el tablero actual y el último mensaje.
 - La prueba externa de OpenRouter alcanzó el proveedor pero quedó limitada por `HTTP 429`; las pruebas locales usan mocks y cubren errores sin depender de cuota.
-- Los tests E2E de Playwright asumen el tablero sembrado: deben ejecutarse con el backend en el puerto 8000 y una base de datos nueva (`PM_DATABASE_PATH`).
+- Los tests E2E de Playwright asumen el tablero sembrado: `playwright.config.ts` arranca el backend con una base de datos temporal nueva en cada ejecución.
 
 ## Part 1: Planificación y preparación
 
@@ -153,7 +153,7 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - [x] Sincronizar cambios de arrastre, edición y creación de tarjetas con el backend.
 - [x] Manejar estados de carga, error y reintento de forma simple.
 - [x] Revisar que la UI sigue funcionando con datos persistentes.
-- [ ] Ejecutar tests de integración muy completos con datos reales. Los 4 E2E (carga, crear tarjeta, mover tarjeta, login/logout) pasan contra el backend real con una base nueva; falta cubrir la persistencia tras recargar y los errores de API.
+- [x] Ejecutar tests de integración muy completos con datos reales: 6 E2E contra el backend real (carga, crear, mover, editar tarjeta, renombrar columna con persistencia tras recargar, login/logout).
 
 ### Pruebas
 - Carga inicial del tablero desde backend.
@@ -164,7 +164,7 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ### Criterios de éxito
 - [x] El tablero es funcional con datos reales y persistentes.
 - [x] La UI refleja el estado real del backend.
-- [x] El comportamiento es estable y compatible con pruebas automatizadas, siempre que los E2E arranquen con una base de datos nueva.
+- [x] El comportamiento es estable y compatible con pruebas automatizadas.
 
 ---
 
@@ -222,9 +222,9 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 
 ### Pruebas
 - [x] Envío de mensaje desde la UI y respuesta visible (test de componente con `fetch` simulado).
-- [ ] Actualización del tablero activada por una instrucción de IA: cubierta en backend (`test_ai_board.py`); falta comprobar la recarga en el frontend.
-- [ ] Interacción con múltiples mensajes consecutivos.
-- [ ] Manejo de errores cuando la IA no devuelve un payload válido: cubierto en backend; falta el test del mensaje de error en el frontend.
+- [x] Actualización del tablero activada por una instrucción de IA: aplicación atómica en backend (`test_ai_board.py`) y recarga del tablero en el frontend (`KanbanBoard.test.tsx`).
+- [x] Interacción con múltiples mensajes consecutivos.
+- [x] Manejo de errores cuando la IA no devuelve un payload válido: 502 en backend y mensaje de error en el frontend.
 - [ ] Prueba real con OpenRouter (bloqueada por `HTTP 429`, ver parte 8).
 
 ### Criterios de éxito
@@ -233,9 +233,11 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - [x] El panel visual se integra con la experiencia del kanban.
 
 ### Estado de verificación (2026-10-05)
-- Backend: `python -m pytest -q` (16 tests pasan).
-- Frontend: `npm run lint` sin errores; `npm run test:unit` (7 tests pasan); `npm run test:e2e` (4 tests pasan con una base nueva).
-- Docker: la imagen se construye con `uv`.
+- Backend: `python -m pytest -q --cov=app` (25 tests pasan, cobertura 94%).
+- Frontend: `npm run lint` y `npx tsc --noEmit` sin errores; `npm run test:unit` (10 tests pasan, cobertura de `src/components` 80%); `npm run test:e2e` (6 tests pasan, repetible).
+- Docker: `scripts/start.bat` y `scripts/start.sh` construyen la imagen con `uv`, arrancan el contenedor con `data/` montado y responden en el puerto 8000; los scripts `stop` lo eliminan.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- Correcciones de la revisión de código (`docs/code.review.md`, acciones A1-A13) aplicadas.
 
 ---
 
