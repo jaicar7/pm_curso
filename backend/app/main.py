@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -12,6 +13,13 @@ from .schemas import BoardCommandRequest, BoardCommandResponse, CardCreate, Card
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 app = FastAPI(title="Project Management MVP")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 database = Database()
 frontend_dir = Path(__file__).resolve().parents[2] / "frontend" / "out"
 

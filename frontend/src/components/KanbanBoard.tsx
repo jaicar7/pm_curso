@@ -11,16 +11,27 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { AIChatSidebar, type ChatMessage } from "@/components/AIChatSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { fetchBoard, createCard, deleteCard, moveCard as moveCardApi, renameColumn } from "@/lib/api";
 import { moveCard, type BoardData } from "@/lib/kanban";
+
+const buildMessage = (role: "user" | "assistant", content: string): ChatMessage => ({
+  id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  role,
+  content,
+});
 
 export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
+    buildMessage("assistant", "Ask me to add, move, or rename cards on the board."),
+  ]);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   const loadBoard = async () => {
     try {
@@ -150,6 +161,38 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
     }
   };
 
+  const handleAiSend = async (message: string) => {
+    setAiMessages((prev) => [...prev, buildMessage("user", message)]);
+    setIsAiLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/ai/board", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.detail ?? "The AI could not process that request.");
+      }
+
+      const answer = payload?.response ?? "I did not get a valid response from the assistant.";
+      setAiMessages((prev) => [...prev, buildMessage("assistant", answer)]);
+      await loadBoard();
+    } catch (aiError) {
+      setAiMessages((prev) => [
+        ...prev,
+        buildMessage("assistant", "The AI could not process that request. Please try again."),
+      ]);
+      setError(aiError instanceof Error ? aiError.message : "The AI could not process that request.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   return (
@@ -158,80 +201,88 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
       <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+          <div className="flex-1">
+            <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
+              <div className="flex flex-wrap items-start justify-between gap-6">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
+                    Single Board Kanban
+                  </p>
+                  <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
+                    Kanban Studio
+                  </h1>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
+                    Keep momentum visible. Rename columns, drag cards between stages,
+                    and capture quick notes without getting buried in settings.
+                  </p>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+                      Focus
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
+                      One board. Five columns. Zero clutter.
+                    </p>
+                  </div>
+                  {onLogout ? (
+                    <button
+                      className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm font-semibold text-[var(--navy-dark)]"
+                      onClick={onLogout}
+                      type="button"
+                    >
+                      Log out
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              {onLogout ? (
-                <button
-                  className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm font-semibold text-[var(--navy-dark)]"
-                  onClick={onLogout}
-                  type="button"
-                >
-                  Log out
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
+              <div className="flex flex-wrap items-center gap-4">
+                {board.columns.map((column) => (
+                  <div
+                    key={column.id}
+                    className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
+                  >
+                    <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
+                    {column.title}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </header>
+            </header>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-                onRenameCommit={handleColumnBlur}
-              />
-            ))}
-          </section>
-          <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCorners}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <section className="mt-6 grid gap-6 lg:grid-cols-5">
+                {board.columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                    onRename={handleRenameColumn}
+                    onAddCard={handleAddCard}
+                    onDeleteCard={handleDeleteCard}
+                    onRenameCommit={handleColumnBlur}
+                  />
+                ))}
+              </section>
+              <DragOverlay>
+                {activeCard ? (
+                  <div className="w-[260px]">
+                    <KanbanCardPreview card={activeCard} />
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          </div>
+
+          <div className="w-full xl:max-w-[360px]">
+            <AIChatSidebar messages={aiMessages} isLoading={isAiLoading} onSend={handleAiSend} />
+          </div>
+        </div>
       </main>
     </div>
   );
