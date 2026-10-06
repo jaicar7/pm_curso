@@ -26,23 +26,25 @@ This folder contains the Next.js frontend for the Project Management MVP. It is 
   - `KanbanCard.tsx`: editable card content
   - `KanbanCardPreview.tsx`: drag overlay preview
   - `NewCardForm.tsx`: form for adding a new card
+  - `AIChatSidebar.tsx`: AI chat panel
+  - `LoginForm.tsx`: dummy login form
 - `src/lib/kanban.ts`: core board logic and initial seed data
+- `src/lib/api.ts`: backend API client and conversion to `BoardData`
 - `src/test/`: testing setup utilities
 - `tests/`: Playwright or integration tests
 - `*.test.tsx` and `*.test.ts`: unit tests for UI and logic
 
 ## Current implementation
 
-The frontend currently provides a static demo of a Kanban board with these capabilities:
+The frontend is built as a static export (`output: "export"`) and served by FastAPI at `/`. It provides:
 
-- fixed columns
-- draggable cards between columns
-- optional card creation
-- ability to rename columns
-- card deletion from a column
-- board state stored in local component state
-- no backend persistence yet
-- no user authentication yet
+- login with dummy credentials (`user` / `password`), session kept in localStorage (`src/app/page.tsx`)
+- fixed columns that can be renamed
+- draggable cards between columns, card creation and deletion
+- board state loaded from and saved to the backend API (`src/lib/api.ts`); failed operations show an error and reload the board
+- an AI chat sidebar (`AIChatSidebar.tsx`) that sends requests to `/api/ai/board` and reloads the board after a response
+
+In development, `next dev` rewrites `/api/*` to `http://localhost:8000`, so the backend must be running. Playwright E2E tests assume the seeded board, so run them against a fresh database (start the backend with a new `PM_DATABASE_PATH`).
 
 ## Core board data model
 

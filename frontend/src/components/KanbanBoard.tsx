@@ -27,7 +27,6 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
     buildMessage("assistant", "Ask me to add, move, or rename cards on the board."),
   ]);
@@ -150,14 +149,11 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
 
   const persist = async (operation: () => Promise<void>) => {
     try {
-      setIsSaving(true);
       setError(null);
       await operation();
     } catch (saveError) {
       await loadBoard();
       setError(saveError instanceof Error ? saveError.message : "The board could not be updated.");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -248,6 +244,11 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
                   </div>
                 ))}
               </div>
+              {error ? (
+                <p className="text-sm font-semibold text-[var(--secondary-purple)]" role="alert">
+                  {error}
+                </p>
+              ) : null}
             </header>
 
             <DndContext

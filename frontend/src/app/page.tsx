@@ -1,19 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { LoginForm } from "@/components/LoginForm";
 
 const sessionKey = "pm-mvp-authenticated";
+const subscribe = () => () => {};
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [hasLoadedSession, setHasLoadedSession] = useState(false);
-
-  useEffect(() => {
-    setIsAuthenticated(window.localStorage.getItem(sessionKey) === "true");
-    setHasLoadedSession(true);
-  }, []);
+  const storedSession = useSyncExternalStore(
+    subscribe,
+    () => window.localStorage.getItem(sessionKey) === "true",
+    () => false
+  );
+  const [session, setIsAuthenticated] = useState<boolean | null>(null);
+  const isAuthenticated = session ?? storedSession;
 
   const handleLogin = () => {
     window.localStorage.setItem(sessionKey, "true");
@@ -25,7 +26,7 @@ export default function Home() {
     setIsAuthenticated(false);
   };
 
-  if (!hasLoadedSession || !isAuthenticated) {
+  if (!isAuthenticated) {
     return <LoginForm onLogin={handleLogin} />;
   }
 

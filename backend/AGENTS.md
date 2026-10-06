@@ -21,10 +21,10 @@ FastAPI backend for the Project Management MVP. It serves the exported Next.js f
 - `POST /api/ai/chat`: sends a minimal chat message to OpenRouter.
 - `POST /api/ai/board`: sends the current board and a user request to OpenRouter, validates structured actions, and applies safe changes.
 
-The MVP uses the seeded `user` account internally. API authentication and frontend synchronization are scheduled for later phases.
+The MVP uses the seeded `user` account internally; login is checked only in the frontend.
 
 OpenRouter is configured server-side with `OPENROUTER_API_KEY` and the `nvidia/nemotron-3-ultra-550b-a55b:free` model. Provider failures are returned as `502` without exposing the key.
 
 ## Development
 
-From `backend/`, run `python -m pytest -q`. The database path defaults to `data/project-management.sqlite3` and can be overridden with `PM_DATABASE_PATH`.
+From `backend/`, run `python -m pytest -q`. Dependencies are listed in `requirements.txt` (used by the scripts and by `uv` in the Dockerfile) and mirrored in `pyproject.toml`. The database path defaults to `data/project-management.sqlite3` and can be overridden with `PM_DATABASE_PATH`.

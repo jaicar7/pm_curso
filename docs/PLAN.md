@@ -17,8 +17,11 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - Las mutaciones del frontend usan la API real: carga inicial, renombrado, creación, borrado y movimiento de tarjetas. Las operaciones fallidas muestran error y recargan el board.
 - OpenRouter se invoca únicamente desde el backend. La clave se carga desde `.env` y nunca se envía al frontend.
 - La IA de tablero devuelve JSON validado con Pydantic y hasta 20 acciones. Solo puede usar IDs existentes y acciones explícitamente permitidas; las acciones conflictivas sobre una misma tarjeta se rechazan.
-- El historial de conversación y el sidebar de IA se dejan para la parte 10.
+- El modelo usado es `nvidia/nemotron-3-ultra-550b-a55b:free` (cambiado desde `google/gemma-4-31b-it:free` en la parte 9).
+- El Dockerfile instala las dependencias de Python con `uv pip install` a partir de `backend/requirements.txt`; los scripts locales usan el mismo fichero con `pip`.
+- El sidebar de IA muestra el historial de la conversación en la UI, pero cada petición al modelo solo envía el tablero actual y el último mensaje.
 - La prueba externa de OpenRouter alcanzó el proveedor pero quedó limitada por `HTTP 429`; las pruebas locales usan mocks y cubren errores sin depender de cuota.
+- Los tests E2E de Playwright asumen el tablero sembrado: deben ejecutarse con el backend en el puerto 8000 y una base de datos nueva (`PM_DATABASE_PATH`).
 
 ## Part 1: Planificación y preparación
 
@@ -150,7 +153,7 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 - [x] Sincronizar cambios de arrastre, edición y creación de tarjetas con el backend.
 - [x] Manejar estados de carga, error y reintento de forma simple.
 - [x] Revisar que la UI sigue funcionando con datos persistentes.
-- [ ] Ejecutar tests de integración muy completos con datos reales.
+- [ ] Ejecutar tests de integración muy completos con datos reales. Los 4 E2E (carga, crear tarjeta, mover tarjeta, login/logout) pasan contra el backend real con una base nueva; falta cubrir la persistencia tras recargar y los errores de API.
 
 ### Pruebas
 - Carga inicial del tablero desde backend.
@@ -161,7 +164,7 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ### Criterios de éxito
 - [x] El tablero es funcional con datos reales y persistentes.
 - [x] La UI refleja el estado real del backend.
-- [ ] El comportamiento es estable y compatible con pruebas automatizadas.
+- [x] El comportamiento es estable y compatible con pruebas automatizadas, siempre que los E2E arranquen con una base de datos nueva.
 
 ---
 
@@ -203,30 +206,36 @@ Antes de empezar el desarrollo incremental, el plan debe quedar validado por el 
 ### Criterios de éxito
 - [x] La IA responde con una estructura fiable y útil cuando el proveedor devuelve JSON válido.
 - [x] El backend aplica cambios únicamente si la salida es válida.
-- [ ] La experiencia de usuario refleja de forma consistente los cambios; queda pendiente integrar el sidebar en la parte 10.
+- [x] La experiencia de usuario refleja de forma consistente los cambios: el sidebar de la parte 10 recarga el tablero tras cada respuesta.
 
 ---
 
 ## Part 10: Sidebar de chat con IA
 
 ### Checklist
-- [ ] Diseñar un panel lateral para conversaciones con IA.
-- [ ] Permitir enviar preguntas del usuario y recibir respuestas en la UI.
-- [ ] Aplicar cambios del tablero cuando la IA devuelve una actualización válida.
-- [ ] Refrescar la vista automáticamente si la IA modifica el board.
-- [ ] Mejorar la presentación visual con la paleta de colores definida por el proyecto.
-- [ ] Verificar navegación, accesibilidad mínima y estados de carga.
+- [x] Diseñar un panel lateral para conversaciones con IA (`AIChatSidebar.tsx`).
+- [x] Permitir enviar preguntas del usuario y recibir respuestas en la UI.
+- [x] Aplicar cambios del tablero cuando la IA devuelve una actualización válida (el backend valida y aplica las acciones).
+- [x] Refrescar la vista automáticamente si la IA modifica el board (recarga tras cada respuesta).
+- [x] Mejorar la presentación visual con la paleta de colores definida por el proyecto.
+- [x] Verificar navegación, accesibilidad mínima y estados de carga (campo con etiqueta, botón deshabilitado y estado "Sending...").
 
 ### Pruebas
-- Envío de mensaje desde la UI y respuesta visible.
-- Actualización del tablero activada por una instrucción de IA.
-- Interacción con múltiples mensajes consecutivos.
-- Manejo de errores cuando la IA no devuelve un payload válido.
+- [x] Envío de mensaje desde la UI y respuesta visible (test de componente con `fetch` simulado).
+- [ ] Actualización del tablero activada por una instrucción de IA: cubierta en backend (`test_ai_board.py`); falta comprobar la recarga en el frontend.
+- [ ] Interacción con múltiples mensajes consecutivos.
+- [ ] Manejo de errores cuando la IA no devuelve un payload válido: cubierto en backend; falta el test del mensaje de error en el frontend.
+- [ ] Prueba real con OpenRouter (bloqueada por `HTTP 429`, ver parte 8).
 
 ### Criterios de éxito
-- El usuario puede conversar con la IA desde la app.
-- La IA puede manipular el board de forma coherente.
-- El panel visual se integra con la experiencia del kanban.
+- [x] El usuario puede conversar con la IA desde la app.
+- [x] La IA puede manipular el board de forma coherente (verificado con respuestas simuladas).
+- [x] El panel visual se integra con la experiencia del kanban.
+
+### Estado de verificación (2026-10-05)
+- Backend: `python -m pytest -q` (16 tests pasan).
+- Frontend: `npm run lint` sin errores; `npm run test:unit` (7 tests pasan); `npm run test:e2e` (4 tests pasan con una base nueva).
+- Docker: la imagen se construye con `uv`.
 
 ---
 

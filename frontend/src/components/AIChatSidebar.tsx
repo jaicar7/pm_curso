@@ -84,7 +84,7 @@ export const AIChatSidebar = ({
         <button
           type="submit"
           disabled={isLoading || !draft.trim()}
-          className="inline-flex w-full items-center justify-center rounded-full bg-[var(--accent-yellow)] px-4 py-3 text-sm font-semibold text-[var(--navy-dark)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex w-full items-center justify-center rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? "Sending..." : "Send"}
         </button>
