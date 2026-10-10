@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -14,8 +14,27 @@ import {
 import { AIChatSidebar, type ChatMessage } from "@/components/AIChatSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { fetchBoard, createCard, deleteCard, moveCard as moveCardApi, renameColumn, updateCard } from "@/lib/api";
-import { moveCard, type BoardData } from "@/lib/kanban";
+import { PlusIcon, SearchIcon } from "@/components/Icons";
+import {
+  addColumn,
+  askBoardAssistant,
+  createCard,
+  deleteCard,
+  deleteColumn,
+  fetchBoard,
+  moveCard as moveCardApi,
+  renameColumn,
+  updateCard,
+  type CardFields,
+} from "@/lib/api";
+import {
+  matchesFilter,
+  moveCard,
+  PRIORITIES,
+  PRIORITY_LABELS,
+  type BoardData,
+  type CardFilter,
+} from "@/lib/kanban";
 
 const buildMessage = (role: "user" | "assistant", content: string): ChatMessage => ({
   id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -23,29 +42,37 @@ const buildMessage = (role: "user" | "assistant", content: string): ChatMessage 
   content,
 });
 
-export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
+type KanbanBoardProps = {
+  boardId: string;
+  // Called after any change so the parent can refresh board summaries (card counts).
+  onChange?: () => void;
+};
+
+export const KanbanBoard = ({ boardId, onChange }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<CardFilter>({ query: "", priority: "todas" });
+  const [newColumnTitle, setNewColumnTitle] = useState("");
   const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
-    buildMessage("assistant", "Ask me to add, move, or rename cards on the board."),
+    buildMessage("assistant", "Pídeme que cree, mueva o renombre tarjetas del tablero."),
   ]);
   const [isAiLoading, setIsAiLoading] = useState(false);
 
-  const loadBoard = async () => {
+  const loadBoard = useCallback(async () => {
     try {
-      setError(null);
-      setBoard(await fetchBoard());
+      setBoard(await fetchBoard(boardId));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "The board could not be loaded.");
+      setError(errorMessage(loadError, "No se pudo cargar el tablero."));
     }
-  };
+  }, [boardId]);
 
   useEffect(() => {
     void loadBoard();
-  }, []);
-
-  const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
+  }, [loadBoard]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -55,13 +82,23 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
 
   if (!board) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm font-semibold text-[var(--gray-text)]">
-          {error ?? "Loading your board..."}
-        </p>
-      </main>
+      <p className="py-20 text-center text-sm font-semibold text-[var(--gray-text)]">
+        {error ?? "Cargando tu tablero..."}
+      </p>
     );
   }
+
+  // Runs a change against the API; on failure the board is reloaded so the screen matches the server.
+  const persist = async (operation: () => Promise<void>) => {
+    try {
+      setError(null);
+      await operation();
+      onChange?.();
+    } catch (saveError) {
+      await loadBoard();
+      setError(errorMessage(saveError, "No se pudo actualizar el tablero."));
+    }
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -84,7 +121,7 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
 
     setBoard((prev) => (prev ? { ...prev, columns: nextColumns } : prev));
     await persist(async () => {
-      await moveCardApi(active.id as string, targetColumn.id, nextPosition);
+      await moveCardApi(boardId, active.id as string, targetColumn.id, nextPosition);
     });
   };
 
@@ -104,13 +141,40 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
   const handleColumnBlur = async (columnId: string) => {
     const title = board.columns.find((column) => column.id === columnId)?.title ?? "";
     await persist(async () => {
-      await renameColumn(columnId, title);
+      await renameColumn(boardId, columnId, title);
     });
   };
 
-  const handleAddCard = async (columnId: string, title: string, details: string) => {
+  const handleAddColumn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = newColumnTitle.trim();
+    if (!title) return;
     await persist(async () => {
-      const card = await createCard(columnId, title, details || "No details yet.");
+      const column = await addColumn(boardId, title);
+      setNewColumnTitle("");
+      setBoard((prev) =>
+        prev
+          ? { ...prev, columns: [...prev.columns, { id: column.id, title: column.title, cardIds: [] }] }
+          : prev
+      );
+    });
+  };
+
+  const handleDeleteColumn = async (columnId: string) => {
+    await persist(async () => {
+      await deleteColumn(boardId, columnId);
+      setBoard((prev) =>
+        prev ? { ...prev, columns: prev.columns.filter((column) => column.id !== columnId) } : prev
+      );
+    });
+  };
+
+  const handleAddCard = async (columnId: string, fields: CardFields) => {
+    await persist(async () => {
+      const card = await createCard(boardId, columnId, {
+        ...fields,
+        details: fields.details || "Sin detalles.",
+      });
       setBoard((prev) =>
         prev
           ? {
@@ -127,18 +191,18 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
     });
   };
 
-  const handleUpdateCard = async (cardId: string, title: string, details: string) => {
+  const handleUpdateCard = async (cardId: string, fields: CardFields) => {
     await persist(async () => {
-      const card = await updateCard(cardId, title, details);
+      const card = await updateCard(boardId, cardId, fields);
       setBoard((prev) =>
         prev ? { ...prev, cards: { ...prev.cards, [card.id]: card } } : prev
       );
     });
   };
 
-  const handleDeleteCard = async (_columnId: string, cardId: string) => {
+  const handleDeleteCard = async (cardId: string) => {
     await persist(async () => {
-      await deleteCard(cardId);
+      await deleteCard(boardId, cardId);
       setBoard((prev) =>
         prev
           ? {
@@ -156,145 +220,134 @@ export const KanbanBoard = ({ onLogout }: { onLogout?: () => void }) => {
     });
   };
 
-  const persist = async (operation: () => Promise<void>) => {
-    try {
-      setError(null);
-      await operation();
-    } catch (saveError) {
-      await loadBoard();
-      setError(saveError instanceof Error ? saveError.message : "The board could not be updated.");
-    }
-  };
-
   const handleAiSend = async (message: string) => {
     setAiMessages((prev) => [...prev, buildMessage("user", message)]);
     setIsAiLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/ai/board", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.detail ?? "The AI could not process that request.");
-      }
-
-      const answer = payload?.response ?? "I did not get a valid response from the assistant.";
-      setAiMessages((prev) => [...prev, buildMessage("assistant", answer)]);
+      const payload = await askBoardAssistant(boardId, message);
+      setAiMessages((prev) => [...prev, buildMessage("assistant", payload.response)]);
       await loadBoard();
+      onChange?.();
     } catch (aiError) {
       setAiMessages((prev) => [
         ...prev,
-        buildMessage("assistant", "The AI could not process that request. Please try again."),
+        buildMessage("assistant", "La IA no pudo procesar la petición. Inténtalo de nuevo."),
       ]);
-      setError(aiError instanceof Error ? aiError.message : "The AI could not process that request.");
+      setError(errorMessage(aiError, "La IA no pudo procesar la petición."));
     } finally {
       setIsAiLoading(false);
     }
   };
 
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const activeCard = activeCardId ? board.cards[activeCardId] : null;
+  const isFiltering = filter.query.trim() !== "" || filter.priority !== "todas";
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--stroke)] bg-white/80 px-4 py-3 shadow-[0_4px_14px_rgba(3,33,71,0.05)]">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-[var(--gray-text)] focus-within:border-[var(--primary-blue)]">
+          <SearchIcon />
+          <input
+            value={filter.query}
+            onChange={(event) => setFilter((prev) => ({ ...prev, query: event.target.value }))}
+            placeholder="Buscar tarjetas..."
+            aria-label="Buscar tarjetas"
+            className="w-full bg-transparent text-sm text-[var(--navy-dark)] outline-none"
+          />
+        </label>
+        <select
+          value={filter.priority}
+          onChange={(event) =>
+            setFilter((prev) => ({ ...prev, priority: event.target.value as CardFilter["priority"] }))
+          }
+          aria-label="Filtrar por prioridad"
+          className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+        >
+          <option value="todas">Todas las prioridades</option>
+          {PRIORITIES.map((priority) => (
+            <option key={priority} value={priority}>
+              Prioridad {PRIORITY_LABELS[priority].toLowerCase()}
+            </option>
+          ))}
+        </select>
+        {isFiltering ? (
+          <button
+            type="button"
+            onClick={() => setFilter({ query: "", priority: "todas" })}
+            className="rounded-xl px-3 py-2 text-sm font-semibold text-[var(--primary-blue)] transition hover:bg-[var(--surface)]"
+          >
+            Limpiar filtros
+          </button>
+        ) : null}
+        <form onSubmit={handleAddColumn} className="ml-auto flex items-center gap-2">
+          <input
+            value={newColumnTitle}
+            onChange={(event) => setNewColumnTitle(event.target.value)}
+            placeholder="Nueva columna"
+            aria-label="Título de la nueva columna"
+            className="w-40 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none focus:border-[var(--primary-blue)]"
+          />
+          <button
+            type="submit"
+            disabled={!newColumnTitle.trim()}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm font-semibold text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <PlusIcon />
+            Añadir columna
+          </button>
+        </form>
+      </div>
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-          <div className="flex-1">
-            <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-              <div className="flex flex-wrap items-start justify-between gap-6">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                    Single Board Kanban
-                  </p>
-                  <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                    Kanban Studio
-                  </h1>
-                  <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                    Keep momentum visible. Rename columns, drag cards between stages,
-                    and capture quick notes without getting buried in settings.
-                  </p>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                      Focus
-                    </p>
-                    <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                      One board. Five columns. Zero clutter.
-                    </p>
-                  </div>
-                  {onLogout ? (
-                    <button
-                      className="rounded-xl border border-[var(--stroke)] px-4 py-3 text-sm font-semibold text-[var(--navy-dark)]"
-                      onClick={onLogout}
-                      type="button"
-                    >
-                      Log out
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-4">
-                {board.columns.map((column) => (
-                  <div
-                    key={column.id}
-                    className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                    {column.title}
-                  </div>
-                ))}
-              </div>
-              {error ? (
-                <p className="text-sm font-semibold text-[var(--secondary-purple)]" role="alert">
-                  {error}
-                </p>
-              ) : null}
-            </header>
+      {error ? (
+        <p
+          className="rounded-xl border border-[var(--secondary-purple)]/30 bg-white/80 px-4 py-2 text-sm font-semibold text-[var(--secondary-purple)]"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
 
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCorners}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              <section className="mt-6 grid gap-6 lg:grid-cols-5">
-                {board.columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                    onRename={handleRenameColumn}
-                    onAddCard={handleAddCard}
-                    onDeleteCard={handleDeleteCard}
-                    onUpdateCard={handleUpdateCard}
-                    onRenameCommit={handleColumnBlur}
-                  />
-                ))}
-              </section>
-              <DragOverlay>
-                {activeCard ? (
-                  <div className="w-[260px]">
-                    <KanbanCardPreview card={activeCard} />
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+      <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="min-w-0 flex-1 overflow-x-auto px-1 pb-4">
+            <section className="grid auto-cols-[minmax(230px,1fr)] grid-flow-col gap-3">
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds
+                    .map((cardId) => board.cards[cardId])
+                    .filter((card) => matchesFilter(card, filter))}
+                  onRename={handleRenameColumn}
+                  onRenameCommit={handleColumnBlur}
+                  onDelete={handleDeleteColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                  onUpdateCard={handleUpdateCard}
+                />
+              ))}
+            </section>
           </div>
+          <DragOverlay>
+            {activeCard ? (
+              <div className="w-[250px]">
+                <KanbanCardPreview card={activeCard} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
 
-          <div className="w-full xl:max-w-[360px]">
-            <AIChatSidebar messages={aiMessages} isLoading={isAiLoading} onSend={handleAiSend} />
-          </div>
+        <div className="w-full 2xl:sticky 2xl:top-4 2xl:w-[340px] 2xl:shrink-0">
+          <AIChatSidebar messages={aiMessages} isLoading={isAiLoading} onSend={handleAiSend} />
         </div>
-      </main>
+      </div>
     </div>
   );
 };

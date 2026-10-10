@@ -32,3 +32,24 @@ body {
 .font-display {
   font-family: var(--font-display), "Segoe UI", sans-serif;
 }
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--gray-text);
+  transition: background-color 150ms, color 150ms;
+}
+
+.icon-button:hover {
+  background: var(--surface);
+  color: var(--navy-dark);
+}
+
+.icon-button.danger:hover {
+  background: rgba(117, 57, 145, 0.1);
+  color: var(--secondary-purple);
+}

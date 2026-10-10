@@ -4,25 +4,26 @@ FastAPI backend for the Project Management MVP. It serves the exported Next.js f
 
 ## Structure
 
-- `app/main.py`: FastAPI app, static frontend serving, and API routes.
-- `app/database.py`: SQLite schema initialization and seed data (`Database`), and board/card operations (`Board`, obtained with `with database.board() as board:`, one transaction per block).
+- `app/main.py`: FastAPI app, static frontend serving, session cookie auth (`current_user`, `admin_user` dependencies) and API routes.
+- `app/database.py`: SQLite schema, migration from schema v1 and seed data (`Database`). Operations live on three classes, each obtained with a context manager that is one transaction: `Accounts` (`database.accounts()`: users, passwords, sessions), `Workspace` (`database.workspace(user_id)`: a user's boards) and `Board` (`database.board(user_id, board_id)`: columns and cards of one board, raising `LookupError` for boards the user does not own).
 - `app/ai_board.py`: prompt building, parsing and atomic execution of AI board actions.
-- `app/schemas.py`: Pydantic request models for board mutations.
-- `tests/`: API and smoke tests using temporary SQLite databases where persistence is tested.
+- `app/schemas.py`: Pydantic request models.
+- `tests/`: API, database and AI tests using temporary SQLite databases. `conftest.py` provides `client` (the seeded admin, signed in), `anonymous`, `register(username)` and `make_client(username)`.
 
 ## API
 
-- `GET /api/health`: service health check.
-- `GET /api/boards/me`: returns the demo user's board.
-- `PATCH /api/columns/{column_id}`: renames a column.
-- `POST /api/columns/{column_id}/cards`: creates a card.
-- `PATCH /api/cards/{card_id}`: edits a card.
-- `DELETE /api/cards/{card_id}`: deletes a card.
-- `POST /api/cards/{card_id}/move`: moves a card and normalizes positions.
-- `POST /api/ai/chat`: sends a minimal chat message to OpenRouter.
-- `POST /api/ai/board`: sends the current board and a user request to OpenRouter, validates structured actions, and applies safe changes.
+All routes except health, login, register and logout need the `pm_session` cookie (401 otherwise). Error messages are in Spanish.
 
-The MVP uses the seeded `user` account internally; login is checked only in the frontend.
+- `GET /api/health`: service health check.
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `PUT /api/auth/password`.
+- Administrators only (403 otherwise): `GET|POST /api/users`, `PATCH|DELETE /api/users/{user_id}` (role and password reset). Admins cannot demote or delete themselves and the last admin cannot be removed.
+- `GET|POST /api/boards`, `GET|PATCH|DELETE /api/boards/{board_id}` (the last board cannot be deleted).
+- `POST /api/boards/{board_id}/columns`, `PATCH|DELETE /api/boards/{board_id}/columns/{column_id}` (only empty columns can be deleted).
+- `POST /api/boards/{board_id}/columns/{column_id}/cards`, `PATCH|DELETE /api/boards/{board_id}/cards/{card_id}`, `POST /api/boards/{board_id}/cards/{card_id}/move`. Cards have `priority` (`baja`, `media`, `alta`) and an optional `due_date` (`YYYY-MM-DD`); PATCH changes only the fields sent.
+- `POST /api/boards/{board_id}/ai`: sends the board and a request to OpenRouter, validates structured actions and applies them in one transaction.
+- `POST /api/ai/chat`: sends a minimal chat message to OpenRouter.
+
+The seeded administrator is `user` / `password`.
 
 OpenRouter is configured server-side with `OPENROUTER_API_KEY` and the `nvidia/nemotron-3-ultra-550b-a55b:free` model. Provider failures are returned as `502` without exposing the key.
 

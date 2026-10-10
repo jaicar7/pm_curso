@@ -1,7 +1,19 @@
+export type Priority = "baja" | "media" | "alta";
+
+export const PRIORITIES: Priority[] = ["alta", "media", "baja"];
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
+};
+
 export type Card = {
   id: string;
   title: string;
   details: string;
+  priority: Priority;
+  due_date: string | null;
 };
 
 export type Column = {
@@ -17,56 +29,72 @@ export type BoardData = {
 
 export const initialData: BoardData = {
   columns: [
-    { id: "col-backlog", title: "Backlog", cardIds: ["card-1", "card-2"] },
-    { id: "col-discovery", title: "Discovery", cardIds: ["card-3"] },
+    { id: "col-backlog", title: "Pendientes", cardIds: ["card-1", "card-2"] },
+    { id: "col-discovery", title: "Descubrimiento", cardIds: ["card-3"] },
     {
       id: "col-progress",
-      title: "In Progress",
+      title: "En curso",
       cardIds: ["card-4", "card-5"],
     },
-    { id: "col-review", title: "Review", cardIds: ["card-6"] },
-    { id: "col-done", title: "Done", cardIds: ["card-7", "card-8"] },
+    { id: "col-review", title: "Revisión", cardIds: ["card-6"] },
+    { id: "col-done", title: "Hecho", cardIds: ["card-7", "card-8"] },
   ],
   cards: {
     "card-1": {
       id: "card-1",
-      title: "Align roadmap themes",
-      details: "Draft quarterly themes with impact statements and metrics.",
+      title: "Alinear los temas del roadmap",
+      details: "Redactar los temas trimestrales con su impacto esperado y sus métricas.",
+      priority: "media",
+      due_date: null,
     },
     "card-2": {
       id: "card-2",
-      title: "Gather customer signals",
-      details: "Review support tags, sales notes, and churn feedback.",
+      title: "Recoger señales de clientes",
+      details: "Revisar etiquetas de soporte, notas de ventas y motivos de baja.",
+      priority: "media",
+      due_date: null,
     },
     "card-3": {
       id: "card-3",
-      title: "Prototype analytics view",
-      details: "Sketch initial dashboard layout and key drill-downs.",
+      title: "Prototipo de vista analítica",
+      details: "Esbozar el diseño inicial del panel y los desgloses clave.",
+      priority: "media",
+      due_date: null,
     },
     "card-4": {
       id: "card-4",
-      title: "Refine status language",
-      details: "Standardize column labels and tone across the board.",
+      title: "Afinar el lenguaje de estados",
+      details: "Unificar los nombres de columnas y el tono en todo el tablero.",
+      priority: "media",
+      due_date: null,
     },
     "card-5": {
       id: "card-5",
-      title: "Design card layout",
-      details: "Add hierarchy and spacing for scanning dense lists.",
+      title: "Diseñar la disposición de tarjetas",
+      details: "Añadir jerarquía y espaciado para leer listas densas.",
+      priority: "media",
+      due_date: null,
     },
     "card-6": {
       id: "card-6",
-      title: "QA micro-interactions",
-      details: "Verify hover, focus, and loading states.",
+      title: "Probar las microinteracciones",
+      details: "Verificar los estados de foco, carga y al pasar el ratón.",
+      priority: "media",
+      due_date: null,
     },
     "card-7": {
       id: "card-7",
-      title: "Ship marketing page",
-      details: "Final copy approved and asset pack delivered.",
+      title: "Publicar la página de marketing",
+      details: "Textos finales aprobados y recursos gráficos entregados.",
+      priority: "media",
+      due_date: null,
     },
     "card-8": {
       id: "card-8",
-      title: "Close onboarding sprint",
-      details: "Document release notes and share internally.",
+      title: "Cerrar el sprint de bienvenida",
+      details: "Documentar las notas de la versión y compartirlas internamente.",
+      priority: "media",
+      due_date: null,
     },
   },
 };
@@ -161,8 +189,30 @@ export const moveCard = (
   });
 };
 
-export const createId = (prefix: string) => {
-  const randomPart = Math.random().toString(36).slice(2, 8);
-  const timePart = Date.now().toString(36);
-  return `${prefix}-${randomPart}${timePart}`;
+// Today as YYYY-MM-DD in the viewer's time zone, the same format the API uses for due dates.
+export const todayIso = (now = new Date()) => {
+  const offset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+};
+
+export const isOverdue = (dueDate: string | null, today = todayIso()) =>
+  dueDate !== null && dueDate < today;
+
+export const formatDueDate = (dueDate: string) => {
+  const [year, month, day] = dueDate.split("-");
+  return `${day}/${month}/${year}`;
+};
+
+export type CardFilter = {
+  query: string;
+  priority: Priority | "todas";
+};
+
+export const matchesFilter = (card: Card, filter: CardFilter) => {
+  const query = filter.query.trim().toLocaleLowerCase("es");
+  const matchesQuery =
+    !query ||
+    card.title.toLocaleLowerCase("es").includes(query) ||
+    card.details.toLocaleLowerCase("es").includes(query);
+  return matchesQuery && (filter.priority === "todas" || card.priority === filter.priority);
 };

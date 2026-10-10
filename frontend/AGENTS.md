@@ -18,37 +18,40 @@ This folder contains the Next.js frontend for the Project Management MVP. It is 
 
 - `src/app/`: App shell and routes
   - `layout.tsx`: root layout and global styling hook
-  - `page.tsx`: main page entry for the app
+  - `page.tsx`: checks the session (`GET /api/auth/me`) and shows the login or the app
   - `globals.css`: global styles and design tokens
 - `src/components/`: UI components
-  - `KanbanBoard.tsx`: main board container and drag/drop orchestration
-  - `KanbanColumn.tsx`: individual board columns
-  - `KanbanCard.tsx`: editable card content
-  - `KanbanCardPreview.tsx`: drag overlay preview
-  - `NewCardForm.tsx`: form for adding a new card
+  - `AppShell.tsx`: header with board tabs and navigation (boards, users, account, logout)
+  - `BoardTabs.tsx`: list, create, rename and delete boards
+  - `KanbanBoard.tsx`: one board: toolbar (search, priority filter, add column), drag/drop and AI chat
+  - `KanbanColumn.tsx`, `KanbanCard.tsx`, `KanbanCardPreview.tsx`, `CardForm.tsx`, `NewCardForm.tsx`: columns and cards
   - `AIChatSidebar.tsx`: AI chat panel
-  - `LoginForm.tsx`: dummy login form
-- `src/lib/kanban.ts`: core board logic and initial seed data
-- `src/lib/api.ts`: backend API client and conversion to `BoardData`
+  - `LoginForm.tsx`: sign in and registration
+  - `UsersAdmin.tsx`: user management for administrators
+  - `AccountPanel.tsx`: account details and password change
+  - `Icons.tsx`: inline SVG icons
+- `src/lib/kanban.ts`: board types, `moveCard`, due date and filter helpers, test seed data
+- `src/lib/api.ts`: backend API client (`ApiError` carries the HTTP status) and conversion to `BoardData`
 - `src/test/`: testing setup utilities
-- `tests/`: Playwright or integration tests
+- `tests/`: Playwright end-to-end tests (`kanban.spec.ts`, `accounts.spec.ts`, shared `helpers.ts`)
 - `*.test.tsx` and `*.test.ts`: unit tests for UI and logic
 
 ## Current implementation
 
-The frontend is built as a static export (`output: "export"`) and served by FastAPI at `/`. It provides:
+The frontend is built as a static export (`output: "export"`) and served by FastAPI at `/`. All UI text is in Spanish. It provides:
 
-- login with dummy credentials (`user` / `password`), session kept in localStorage (`src/app/page.tsx`)
-- fixed columns that can be renamed
-- draggable cards between columns, card creation and deletion
-- board state loaded from and saved to the backend API (`src/lib/api.ts`); failed operations show an error and reload the board
-- an AI chat sidebar (`AIChatSidebar.tsx`) that sends requests to `/api/ai/board` and reloads the board after a response
+- sign in and registration against the API; the session is an HttpOnly cookie set by the backend
+- several boards per user, shown as tabs; the last opened board is remembered in localStorage
+- columns that can be added, renamed and deleted when empty
+- draggable cards with priority and due date (overdue dates are highlighted), search and priority filter
+- user management for administrators and a password change form for everyone
+- an AI chat panel that sends requests to `/api/boards/{id}/ai` and reloads the board after a response
 
-Cards can be edited in place (`KanbanCard.tsx`, Edit button). In development, `next dev` rewrites `/api/*` to `http://localhost:8000`, so the backend must be running. `npm run test:e2e` starts both servers itself, with the backend on a new temporary database each run.
+In development, `next dev` rewrites `/api/*` to `http://localhost:8000`, so the backend must be running. `npm run test:e2e` starts both servers itself, with the backend on a new temporary database each run; tests share that database, so they use unique names (`unique()` in `tests/helpers.ts`).
 
 ## Core board data model
 
-The board state is defined in `src/lib/kanban.ts` using a simple shape:
+The board state is defined in `src/lib/kanban.ts`:
 
 - `BoardData`
   - `columns`: ordered list of columns
@@ -56,15 +59,7 @@ The board state is defined in `src/lib/kanban.ts` using a simple shape:
 - `Column`
   - `id`, `title`, `cardIds`
 - `Card`
-  - `id`, `title`, `details`
-
-The initial seed data includes several example cards spread across five default columns:
-
-- Backlog
-- Discovery
-- In Progress
-- Review
-- Done
+  - `id`, `title`, `details`, `priority` (`baja` | `media` | `alta`), `due_date` (`YYYY-MM-DD` or null)
 
 ## Functionality notes
 
@@ -78,7 +73,7 @@ Columns can be renamed from the UI by passing a title update to the board state.
 
 ### Card creation
 
-A new card is created with a generated id and appended to the selected column.
+A new card is created by the API and appended to the selected column.
 
 ### Card deletion
 

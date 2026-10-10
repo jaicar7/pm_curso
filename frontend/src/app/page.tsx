@@ -1,34 +1,36 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-import { KanbanBoard } from "@/components/KanbanBoard";
+import { useCallback, useEffect, useState } from "react";
+import { AppShell } from "@/components/AppShell";
 import { LoginForm } from "@/components/LoginForm";
-
-const sessionKey = "pm-mvp-authenticated";
-const subscribe = () => () => {};
+import { fetchMe, logout, type User } from "@/lib/api";
 
 export default function Home() {
-  const storedSession = useSyncExternalStore(
-    subscribe,
-    () => window.localStorage.getItem(sessionKey) === "true",
-    () => false
-  );
-  const [session, setIsAuthenticated] = useState<boolean | null>(null);
-  const isAuthenticated = session ?? storedSession;
+  // undefined while the session is being checked, null when signed out.
+  const [user, setUser] = useState<User | null | undefined>(undefined);
 
-  const handleLogin = () => {
-    window.localStorage.setItem(sessionKey, "true");
-    setIsAuthenticated(true);
-  };
+  useEffect(() => {
+    fetchMe().then(setUser, () => setUser(null));
+  }, []);
 
-  const handleLogout = () => {
-    window.localStorage.removeItem(sessionKey);
-    setIsAuthenticated(false);
-  };
+  // Wait for the server to drop the session cookie so a quick re-login cannot race with it.
+  const handleLogout = useCallback(() => {
+    void logout()
+      .catch(() => undefined)
+      .finally(() => setUser(null));
+  }, []);
 
-  if (!isAuthenticated) {
-    return <LoginForm onLogin={handleLogin} />;
+  if (user === undefined) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm font-semibold text-[var(--gray-text)]">Cargando...</p>
+      </main>
+    );
   }
 
-  return <KanbanBoard onLogout={handleLogout} />;
+  if (!user) {
+    return <LoginForm onLogin={setUser} />;
+  }
+
+  return <AppShell key={user.id} user={user} onLogout={handleLogout} />;
 }

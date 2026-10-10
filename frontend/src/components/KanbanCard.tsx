@@ -1,18 +1,55 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import type { Card } from "@/lib/kanban";
+import type { CardFields } from "@/lib/api";
+import { formatDueDate, isOverdue, PRIORITY_LABELS, type Card } from "@/lib/kanban";
+import { CardForm } from "@/components/CardForm";
+import { CalendarIcon, PencilIcon, TrashIcon } from "@/components/Icons";
 
 type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => void;
-  onUpdate: (cardId: string, title: string, details: string) => void;
+  onUpdate: (cardId: string, fields: CardFields) => void;
+};
+
+const priorityClass: Record<"alta" | "baja", string> = {
+  alta: "bg-[var(--secondary-purple)]/10 text-[var(--secondary-purple)]",
+  baja: "bg-[var(--surface)] text-[var(--gray-text)]",
+};
+
+export const CardMeta = ({ card }: { card: Card }) => {
+  const overdue = isOverdue(card.due_date);
+  if (card.priority === "media" && !card.due_date) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+      {/* Medium is the default, so only the priorities that stand out get a badge. */}
+      {card.priority !== "media" ? (
+        <span className={clsx("rounded-full px-2 py-0.5", priorityClass[card.priority])}>
+          Prioridad {PRIORITY_LABELS[card.priority].toLowerCase()}
+        </span>
+      ) : null}
+      {card.due_date ? (
+        <span
+          className={clsx(
+            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 [&_svg]:h-3 [&_svg]:w-3",
+            overdue
+              ? "bg-[var(--secondary-purple)] text-white"
+              : "bg-[var(--primary-blue)]/10 text-[var(--primary-blue)]"
+          )}
+          title={overdue ? "Fecha límite vencida" : "Fecha límite"}
+        >
+          <CalendarIcon />
+          {formatDueDate(card.due_date)}
+          {overdue ? " (vencida)" : ""}
+        </span>
+      ) : null}
+    </div>
+  );
 };
 
 export const KanbanCard = ({ card, onDelete, onUpdate }: KanbanCardProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState({ title: card.title, details: card.details });
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id, disabled: isEditing });
 
@@ -21,93 +58,68 @@ export const KanbanCard = ({ card, onDelete, onUpdate }: KanbanCardProps) => {
     transition,
   };
 
-  const startEditing = () => {
-    setDraft({ title: card.title, details: card.details });
-    setIsEditing(true);
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!draft.title.trim()) {
-      return;
-    }
-    onUpdate(card.id, draft.title.trim(), draft.details.trim());
-    setIsEditing(false);
-  };
-
   return (
     <article
       ref={setNodeRef}
       style={style}
       className={clsx(
-        "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
-        "transition-all duration-150",
+        "group rounded-xl border border-[var(--stroke)] bg-white px-3 py-3 shadow-[0_4px_12px_rgba(3,33,71,0.06)]",
+        "transition-all duration-150 hover:border-[var(--primary-blue)]/40",
+        !isEditing && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
       )}
       {...(isEditing ? {} : { ...attributes, ...listeners })}
       data-testid={`card-${card.id}`}
     >
       {isEditing ? (
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            value={draft.title}
-            onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
-            aria-label="Edit card title"
-            className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
-            required
-          />
-          <textarea
-            value={draft.details}
-            onChange={(event) => setDraft((prev) => ({ ...prev, details: event.target.value }))}
-            aria-label="Edit card details"
-            rows={3}
-            className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsEditing(false)}
-              className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        <CardForm
+          initial={{
+            title: card.title,
+            details: card.details,
+            priority: card.priority,
+            due_date: card.due_date,
+          }}
+          submitLabel="Guardar"
+          onSubmit={(fields) => {
+            onUpdate(card.id, fields);
+            setIsEditing(false);
+          }}
+          onCancel={() => setIsEditing(false)}
+        />
       ) : (
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
+        <>
+          <div className="flex items-start gap-2">
+            <h4 className="min-w-0 flex-1 break-words pt-1 font-display text-sm font-semibold leading-5 text-[var(--navy-dark)]">
               {card.title}
             </h4>
-            <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
+            <div className="-mr-1 -mt-0.5 flex shrink-0 items-center opacity-70 transition group-hover:opacity-100">
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="icon-button"
+                aria-label={`Editar ${card.title}`}
+                title="Editar"
+              >
+                <PencilIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(card.id)}
+                className="icon-button danger"
+                aria-label={`Eliminar ${card.title}`}
+                title="Eliminar"
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          </div>
+          {card.details ? (
+            <p className="mt-1 break-words text-[13px] leading-5 text-[var(--gray-text)]">
               {card.details}
             </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <button
-              type="button"
-              onClick={startEditing}
-              className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--primary-blue)] transition hover:border-[var(--stroke)]"
-              aria-label={`Edit ${card.title}`}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(card.id)}
-              className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
-              aria-label={`Delete ${card.title}`}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
+          ) : null}
+          <CardMeta card={card} />
+        </>
       )}
     </article>
   );

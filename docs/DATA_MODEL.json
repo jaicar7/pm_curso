@@ -1,26 +1,41 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "database": {
     "engine": "SQLite",
     "file": "data/project-management.sqlite3",
-    "initialization": "Create the database and tables on backend startup when they do not exist.",
+    "initialization": "On backend startup, migrate older databases (PRAGMA user_version), then create missing tables and seed the default admin when there are no users.",
     "foreign_keys": "PRAGMA foreign_keys = ON"
   },
   "entities": {
     "users": {
-      "purpose": "Application users. The MVP seeds one user with username user.",
+      "purpose": "Application accounts. Users register themselves or are created by an administrator.",
       "columns": {
         "id": { "type": "TEXT", "required": true, "primary_key": true },
-        "username": { "type": "TEXT", "required": true, "unique": true },
-        "password_hash": { "type": "TEXT", "required": true },
+        "username": { "type": "TEXT", "required": true, "unique": true, "collation": "NOCASE" },
+        "password_hash": { "type": "TEXT", "required": true, "format": "pbkdf2_sha256$iterations$salt$digest" },
+        "is_admin": { "type": "INTEGER", "required": true, "default": 0 },
         "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
       },
       "constraints": [
-        "username must not be empty"
+        "username: 3-32 letters, digits, '.', '-' or '_', unique ignoring case",
+        "password: at least 8 characters",
+        "at least one administrator must always exist"
+      ]
+    },
+    "sessions": {
+      "purpose": "Login sessions; the token is sent in the HttpOnly pm_session cookie.",
+      "columns": {
+        "token": { "type": "TEXT", "required": true, "primary_key": true },
+        "user_id": { "type": "TEXT", "required": true, "references": "users.id" },
+        "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
+      },
+      "constraints": [
+        "sessions expire 30 days after creation",
+        "changing or resetting a password deletes the user's sessions"
       ]
     },
     "boards": {
-      "purpose": "The Kanban board owned by a user.",
+      "purpose": "Kanban boards; a user owns any number of them.",
       "columns": {
         "id": { "type": "TEXT", "required": true, "primary_key": true },
         "user_id": { "type": "TEXT", "required": true, "references": "users.id" },
@@ -29,11 +44,12 @@
         "updated_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
       },
       "constraints": [
-        "UNIQUE(user_id) enforces one board per user for the MVP"
+        "a user keeps at least one board",
+        "new boards start with the five default columns"
       ]
     },
     "columns": {
-      "purpose": "Fixed board stages whose titles may be renamed.",
+      "purpose": "Board stages; they can be added, renamed and removed when empty.",
       "columns": {
         "id": { "type": "TEXT", "required": true, "primary_key": true },
         "board_id": { "type": "TEXT", "required": true, "references": "boards.id" },
@@ -44,7 +60,8 @@
       },
       "constraints": [
         "UNIQUE(board_id, position) keeps column order deterministic",
-        "UNIQUE(board_id, id) keeps column identifiers scoped to a board"
+        "UNIQUE(board_id, id) keeps column identifiers scoped to a board",
+        "a board keeps at least one column"
       ]
     },
     "cards": {
@@ -55,6 +72,8 @@
         "column_id": { "type": "TEXT", "required": true, "references": "columns.id" },
         "title": { "type": "TEXT", "required": true },
         "details": { "type": "TEXT", "required": true, "default": "" },
+        "priority": { "type": "TEXT", "required": true, "default": "media", "enum": ["baja", "media", "alta"] },
+        "due_date": { "type": "TEXT", "required": false, "format": "YYYY-MM-DD" },
         "position": { "type": "INTEGER", "required": true, "minimum": 0 },
         "created_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" },
         "updated_at": { "type": "TEXT", "required": true, "format": "ISO-8601 UTC" }
@@ -66,40 +85,51 @@
     }
   },
   "relationships": [
-    "users 1-to-1 boards for the MVP, modeled as users 1-to-many for future expansion",
+    "users 1-to-many sessions",
+    "users 1-to-many boards",
     "boards 1-to-many columns",
     "boards 1-to-many cards",
     "columns 1-to-many cards"
   ],
   "delete_behavior": {
-    "user": "CASCADE boards, columns, and cards",
-    "board": "CASCADE columns and cards",
+    "user": "CASCADE sessions, boards, columns, and cards",
+    "board": "Delete its cards, then CASCADE columns",
     "column": "RESTRICT while cards exist; move or delete cards before removing a column"
+  },
+  "migrations": {
+    "1_to_2": "Add users.is_admin (user-1 becomes admin), the sessions table, cards.priority and cards.due_date; rebuild boards without UNIQUE(user_id) so users can own several boards."
   },
   "seed_data": {
     "user": {
+      "id": "user-1",
       "username": "user",
       "password": "password",
-      "storage": "Store only a password hash in the database; the literal MVP password is used only by the seed/setup path."
+      "is_admin": true,
+      "storage": "Store only a password hash in the database; the literal password is used only by the seed path."
     },
+    "board": { "id": "board-1", "title": "Estudio Kanban" },
     "columns": [
-      { "id": "col-backlog", "title": "Backlog", "position": 0 },
-      { "id": "col-discovery", "title": "Discovery", "position": 1 },
-      { "id": "col-progress", "title": "In Progress", "position": 2 },
-      { "id": "col-review", "title": "Review", "position": 3 },
-      { "id": "col-done", "title": "Done", "position": 4 }
+      { "id": "col-backlog", "title": "Pendientes", "position": 0 },
+      { "id": "col-discovery", "title": "Descubrimiento", "position": 1 },
+      { "id": "col-progress", "title": "En curso", "position": 2 },
+      { "id": "col-review", "title": "Revisión", "position": 3 },
+      { "id": "col-done", "title": "Hecho", "position": 4 }
     ]
   },
   "api_mapping": {
     "board_response": "Return columns ordered by position, with cards nested in each column ordered by position.",
-    "rename_column": "Update columns.title and boards.updated_at.",
+    "board_list": "Return the user's boards ordered by creation, each with its card count.",
+    "rename_column": "Update columns.title.",
     "create_card": "Insert cards with the next position for the selected column.",
+    "update_card": "Partial update: only fields sent change; a null due_date clears it.",
     "move_card": "Update column_id and normalize positions in the source and destination columns.",
-    "delete_card": "Delete the card and normalize positions in its column."
+    "delete_card": "Delete the card and normalize positions in its column.",
+    "delete_column": "Only when empty; renumber the remaining column positions."
   },
   "implementation_notes": [
     "Use parameterized SQL for all queries.",
     "Use transactions for moves and other operations affecting more than one row.",
+    "Every board, column and card query is scoped by the signed-in user's board id; another user's ids return 404.",
     "Do not store the frontend cardIds array; derive ordering from cards.column_id and cards.position."
   ]
 }

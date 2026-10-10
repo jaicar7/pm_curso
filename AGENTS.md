@@ -3,17 +3,18 @@
 ## Business Requirements
 
 This project is building a Project Management App. Key features:
-- A user can sign in
-- When signed in, the user sees a Kanban board representing their project
-- The Kanban board has fixed columns that can be renamed
-- The cards on the Kanban board can be moved with drag and drop, and edited
-- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards
+- A user can register and sign in; sessions are server-side (HttpOnly cookie)
+- Administrators manage users: create, promote/demote, reset passwords, delete
+- A user owns several Kanban boards and switches between them
+- Columns can be added, renamed and removed when empty
+- The cards on the Kanban board can be moved with drag and drop, and edited; they have a priority and an optional due date
+- Cards can be searched and filtered by priority
+- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards on the current board
+- The whole UI is in Spanish
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
-
-For the MVP, there will only be 1 Kanban board per signed in user.
+The database seeds one administrator, 'user' / 'password'. Nobody can see or change another user's boards.
 
 For the MVP, this will run locally (in a docker container)
 

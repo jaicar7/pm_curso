@@ -16,7 +16,7 @@ class OpenRouterError(RuntimeError):
 def chat_with_openrouter(message: str, api_key: str | None = None) -> str:
     key = api_key or os.getenv("OPENROUTER_API_KEY")
     if not key:
-        raise OpenRouterError("OPENROUTER_API_KEY is not configured")
+        raise OpenRouterError("OPENROUTER_API_KEY no está configurada")
 
     try:
         response = httpx.post(
@@ -37,19 +37,19 @@ def chat_with_openrouter(message: str, api_key: str | None = None) -> str:
         payload: dict[str, Any] = response.json()
     except httpx.HTTPStatusError as error:
         raise OpenRouterError(
-            f"OpenRouter returned HTTP {error.response.status_code}"
+            f"OpenRouter devolvió HTTP {error.response.status_code}"
         ) from error
     except httpx.RequestError as error:
-        raise OpenRouterError("Could not connect to OpenRouter") from error
+        raise OpenRouterError("No se pudo conectar con OpenRouter") from error
     except ValueError as error:
-        raise OpenRouterError("OpenRouter returned invalid JSON") from error
+        raise OpenRouterError("OpenRouter devolvió un JSON no válido") from error
 
     try:
         content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as error:
-        raise OpenRouterError("OpenRouter returned an invalid response") from error
+        raise OpenRouterError("OpenRouter devolvió una respuesta no válida") from error
 
     if not isinstance(content, str) or not content.strip():
-        raise OpenRouterError("OpenRouter returned an empty response")
+        raise OpenRouterError("OpenRouter devolvió una respuesta vacía")
 
     return content.strip()

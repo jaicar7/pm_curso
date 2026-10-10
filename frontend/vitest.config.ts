@@ -10,6 +10,9 @@ export default defineConfig({
     globals: true,
     coverage: {
       reporter: ["text", "html"],
+      include: ["src/**"],
+      // layout.tsx only wires fonts and metadata for Next.js.
+      exclude: ["src/**/*.test.*", "src/test/**", "src/app/layout.tsx"],
     },
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["node_modules", "tests"],
